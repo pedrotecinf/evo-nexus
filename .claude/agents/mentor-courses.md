@@ -66,7 +66,7 @@ When receiving a request, follow this framework:
 
 ## Working Folder
 
-Folder: `08 Cursos/` — paths, modules, didactic material for the course platform.
+Folder: `workspace/courses/` — paths, modules, didactic material for the course platform.
 
 ## Coordination
 

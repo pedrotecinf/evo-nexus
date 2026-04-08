@@ -79,7 +79,7 @@ Do not list tasks before organizing. Do not ask for confirmation on each one. Or
 
 ### Step 5 — Save artefato
 
-Save um relatório curto em `01 Daily Logs/[C] YYYY-MM-DD-todoist-review.md` com:
+Save um relatório curto em `workspace/daily-logs/[C] YYYY-MM-DD-todoist-review.md` com:
 
 ```markdown
 # Triagem Todoist — YYYY-MM-DD
@@ -96,7 +96,7 @@ Save um relatório curto em `01 Daily Logs/[C] YYYY-MM-DD-todoist-review.md` com
 | ... | ... | ... |
 ```
 
-Create the directory `01 Daily Logs/` if it does not exist.
+Create the directory `workspace/daily-logs/` if it does not exist.
 
 ### Step 6 — Final report (curto)
 

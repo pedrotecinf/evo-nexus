@@ -101,7 +101,7 @@ Activity classifications:
 
 Save the filled HTML to:
 ```
-02 Projects/github-reviews/[C] YYYY-MM-DD-github-review.html
+workspace/projects/github-reviews/[C] YYYY-MM-DD-github-review.html
 ```
 
 Create directory if it does not exist.

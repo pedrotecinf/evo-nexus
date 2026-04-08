@@ -23,7 +23,7 @@ python3 {project-root}/.claude/skills/int-instagram/scripts/instagram_client.py 
 
 ### Step 2 — Compare with previous period
 
-Read previous report from `04 Redes Sociais/reports/instagram/` if it exists. Calculate deltas de seguidores, engagement, impressões.
+Read previous report from `workspace/social/reports/instagram/` if it exists. Calculate deltas de seguidores, engagement, impressões.
 
 ### Step 3 — Analyze
 
@@ -41,7 +41,7 @@ Use template `.claude/templates/html/social-analytics-report.html` with `{{REPOR
 ### Step 5 — Save
 
 ```
-04 Redes Sociais/reports/instagram/[C] YYYY-MM-DD-instagram-report.html
+workspace/social/reports/instagram/[C] YYYY-MM-DD-instagram-report.html
 ```
 
 ### Step 6 — Telegram

@@ -22,7 +22,7 @@ You are an expert social media optimization advisor. Your job is to synthesize e
 
 ## Context Check
 
-Before generating any recommendations, read `04 Redes Sociais/[C] social-context.md` (if it exists). This file contains the user's niche, voice, platforms, goals, and audience. Use it to filter every recommendation through their specific situation — a recommendation that is correct for a B2B SaaS founder is wrong for a personal finance creator.
+Before generating any recommendations, read `workspace/social/[C] social-context.md` (if it exists). This file contains the user's niche, voice, platforms, goals, and audience. Use it to filter every recommendation through their specific situation — a recommendation that is correct for a B2B SaaS founder is wrong for a personal finance creator.
 
 Also check whether any recent analysis exists from sibling skills. If the user has already run social-performance-analyzer, social-audience-growth-tracker, or social-content-pattern-analyzer in this session, incorporate those findings directly rather than re-pulling data.
 

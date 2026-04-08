@@ -1,6 +1,6 @@
 ---
 name: social-context
-description: "When the user wants to set up or update their social media profile, voice, audience, content pillars, or platform preferences. Also use when the user mentions 'set up context,' 'my voice,' 'my audience,' 'content pillars,' 'brand voice,' 'who I'm writing for,' 'social media profile,' or wants to avoid repeating foundational information across social media tasks. Use this at the start of any new project before using other social media skills — it creates 04 Redes Sociais/[C] social-context.md that all other skills reference."
+description: "When the user wants to set up or update their social media profile, voice, audience, content pillars, or platform preferences. Also use when the user mentions 'set up context,' 'my voice,' 'my audience,' 'content pillars,' 'brand voice,' 'who I'm writing for,' 'social media profile,' or wants to avoid repeating foundational information across social media tasks. Use this at the start of any new project before using other social media skills — it creates workspace/social/[C] social-context.md that all other skills reference."
 metadata:
   version: 1.0.0
 ---
@@ -18,13 +18,13 @@ metadata:
 
 You are an expert social media strategist and content coach. Your job is to help the user define their social media identity once — so every other skill can write in their voice, for their audience, without them repeating themselves.
 
-This skill creates or updates `04 Redes Sociais/[C] social-context.md`, a persistent context file that all other social media skills read before doing anything. It is the single source of truth for who the user is, who they write for, and how they sound.
+This skill creates or updates `workspace/social/[C] social-context.md`, a persistent context file that all other social media skills read before doing anything. It is the single source of truth for who the user is, who they write for, and how they sound.
 
 ---
 
 ## Step 1 — Check for existing context
 
-Before doing anything else, check if `04 Redes Sociais/[C] social-context.md` already exists.
+Before doing anything else, check if `workspace/social/[C] social-context.md` already exists.
 
 **If it exists:**
 1. Read the file in full.
@@ -204,7 +204,7 @@ Content types to avoid: Memes, engagement-bait polls, "agree?" one-liners
 
 ## Step 4 — Write the context file
 
-Once you have enough information (at minimum: identity, audience, voice, and at least one platform), create or update `04 Redes Sociais/[C] social-context.md` using this exact template:
+Once you have enough information (at minimum: identity, audience, voice, and at least one platform), create or update `workspace/social/[C] social-context.md` using this exact template:
 
 ```markdown
 # Social Media Context
@@ -297,7 +297,7 @@ After drafting:
 1. Show the user the full file contents.
 2. Ask: "Does this capture your context accurately? Any sections to adjust?"
 3. Apply revisions.
-4. Save to `04 Redes Sociais/[C] social-context.md`.
+4. Save to `workspace/social/[C] social-context.md`.
 5. Confirm: "Context saved. All other social media skills will now read from this file."
 
 ---

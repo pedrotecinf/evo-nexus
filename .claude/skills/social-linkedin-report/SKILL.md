@@ -27,7 +27,7 @@ Use template `.claude/templates/html/social-analytics-report.html` with availabl
 ### Step 3 — Save
 
 ```
-04 Redes Sociais/reports/linkedin/[C] YYYY-MM-DD-linkedin-report.html
+workspace/social/reports/linkedin/[C] YYYY-MM-DD-linkedin-report.html
 ```
 
 ### Step 4 — Telegram

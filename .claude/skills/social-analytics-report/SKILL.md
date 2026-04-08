@@ -68,7 +68,7 @@ Rankear os top 10 conteúdos de TODAS as plataformas por engagement (likes + com
 
 ### Step 5 — Compare with previous period
 
-Ler o relatório anterior em `04 Redes Sociais/reports/consolidated/` if it exists. Calculate deltas de:
+Ler o relatório anterior em `workspace/social/reports/consolidated/` if it exists. Calculate deltas de:
 - Seguidores por plataforma
 - Engagement médio
 - Volume de publicações
@@ -133,7 +133,7 @@ Para `{{MISSING_INTEGRATIONS}}` — se alguma plataforma não está configurada:
 ### Step 8 — Save
 
 ```
-04 Redes Sociais/reports/consolidated/[C] YYYY-MM-DD-social-analytics.html
+workspace/social/reports/consolidated/[C] YYYY-MM-DD-social-analytics.html
 ```
 
 Criar diretório if it does not exist.

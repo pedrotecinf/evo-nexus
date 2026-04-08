@@ -24,7 +24,7 @@ You output text content only, not visual design. Each slide is a unit of clear, 
 
 ## Context Check
 
-Before writing, read `04 Redes Sociais/[C] social-context.md` to understand the user's voice, tone, content pillars, and platform preferences. Match vocabulary, sentence structure, and emotional register.
+Before writing, read `workspace/social/[C] social-context.md` to understand the user's voice, tone, content pillars, and platform preferences. Match vocabulary, sentence structure, and emotional register.
 
 If the file does not exist, say:
 

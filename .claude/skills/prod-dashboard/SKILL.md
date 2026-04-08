@@ -19,28 +19,28 @@ Ler todas as fontes disponíveis sem narrar cada passo. Se alguma fonte não exi
 Rodar `todoist list --filter "today | overdue"` para contar tarefas pendentes.
 
 ### 1b. Linear / Sprint
-Ler o último relatório de Linear em `02 Projects/linear-reviews/` (arquivo mais recente `[C] *-linear-review.html`). Extrair:
+Ler o último relatório de Linear em `workspace/projects/linear-reviews/` (arquivo mais recente `[C] *-linear-review.html`). Extrair:
 - Progresso do sprint (% e contagem)
 - Blockers
 - Issues em review
 - Issues concluídas
 
 ### 1c. GitHub
-Ler o último relatório de GitHub em `02 Projects/github-reviews/` (arquivo mais recente `[C] *-github-review.html`). Extrair:
+Ler o último relatório de GitHub em `workspace/projects/github-reviews/` (arquivo mais recente `[C] *-github-review.html`). Extrair:
 - PRs abertos
 - Issues da comunidade
 - Stars da semana
 - Último release
 
 ### 1d. Comunidade
-Ler o último community pulse em `03 Comunidade/reports/daily/` ou weekly em `03 Comunidade/reports/weekly/`. Extrair:
+Ler o último community pulse em `workspace/community/reports/daily/` ou weekly em `workspace/community/reports/weekly/`. Extrair:
 - WAM (Weekly Active Members)
 - Sentimento geral
 - Tickets de suporte
 - Docs gaps
 
 ### 1e. Financeiro
-Ler o último strategy digest em `09 Estrategia/digests/` (arquivo mais recente). Extrair:
+Ler o último strategy digest em `workspace/strategy/digests/` (arquivo mais recente). Extrair:
 - MRR
 - Assinaturas
 - Runway
@@ -50,7 +50,7 @@ Ler o último strategy digest em `09 Estrategia/digests/` (arquivo mais recente)
 Usar /gog-calendar para listar eventos de hoje.
 
 ### 1g. Reuniões
-Ler `07 Reuniões/summaries/` ou `09 Reuniões/summaries/` — últimas 5 reuniões. Extrair:
+Ler `workspace/meetings/summaries/` ou `workspace/meetings/summaries/` — últimas 5 reuniões. Extrair:
 - Data, título, participantes, action items
 
 ### 1h. Métricas de rotinas
@@ -58,7 +58,7 @@ Ler `ADWs/logs/metrics.json` para status de cada rotina automatizada:
 - Nome, agente, última execução, duração média, taxa de sucesso
 
 ### 1i. Morning Briefing
-Ler o briefing matinal de hoje em `01 Daily Logs/[C] YYYY-MM-DD-morning.html` se existir, para complementar dados de agenda e tarefas prioritárias.
+Ler o briefing matinal de hoje em `workspace/daily-logs/[C] YYYY-MM-DD-morning.html` se existir, para complementar dados de agenda e tarefas prioritárias.
 
 ## Step 2 — Calcular health badges
 
@@ -128,7 +128,7 @@ Se não houver pontos de atenção, escrever "Nenhum ponto de atenção no momen
 
 Save o HTML preenchido em:
 ```
-01 Daily Logs/[C] YYYY-MM-DD-dashboard.html
+workspace/daily-logs/[C] YYYY-MM-DD-dashboard.html
 ```
 
 ## Step 5 — Confirm
@@ -138,7 +138,7 @@ Present a short summary:
 ```
 ## Dashboard gerado
 
-**Arquivo:** 01 Daily Logs/[C] YYYY-MM-DD-dashboard.html
+**Arquivo:** workspace/daily-logs/[C] YYYY-MM-DD-dashboard.html
 **Health:** Produto {status} | Comunidade {status} | Financeiro {status} | Rotinas {status}
 **Alertas:** {N} pontos de atenção
 ```

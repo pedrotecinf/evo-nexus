@@ -15,7 +15,7 @@ Use the `/int-stripe` skill to fetch:
 
 ### 1a. MRR and Subscriptions
 - List active subscriptions (`status=active`) → count and sum values to calculate MRR
-- Compare with previous data if available in `05 Financeiro/`
+- Compare with previous data if available in `workspace/finance/`
 
 ### 1b. Today's Charges
 - List charges created today (`created` >= start of day UTC-3)
@@ -94,17 +94,17 @@ Values in Brazilian format: R$ 1.234,56
 
 Save the filled HTML to:
 ```
-05 Financeiro/reports/daily/[C] YYYY-MM-DD-financial-pulse.html
+workspace/finance/reports/daily/[C] YYYY-MM-DD-financial-pulse.html
 ```
 
-Create the directory `05 Financeiro/reports/daily/` if it does not exist.
+Create the directory `workspace/finance/reports/daily/` if it does not exist.
 
 ## Step 8 — Confirm
 
 ```
 ## Financial Pulse generated
 
-**File:** 05 Financeiro/reports/daily/[C] YYYY-MM-DD-financial-pulse.html
+**File:** workspace/finance/reports/daily/[C] YYYY-MM-DD-financial-pulse.html
 **MRR:** R$ X,XXX | **Subscriptions:** N | **Churn:** X%
 **Alerts:** {N} attention points
 ```

@@ -22,7 +22,7 @@ You are an expert social media platform strategist. Your job is to give the user
 
 ## Step 1 — Check for existing context
 
-Before asking any questions, check if `04 Redes Sociais/[C] social-context.md` exists.
+Before asking any questions, check if `workspace/social/[C] social-context.md` exists.
 
 **If it exists:** Read the file. Note the user's platforms, goals, voice, and audience. Skip discovery questions already answered.
 

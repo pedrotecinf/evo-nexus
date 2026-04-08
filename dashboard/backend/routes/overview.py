@@ -13,13 +13,6 @@ REPORT_DIRS = [
     "workspace/finance/reports",
     "workspace/projects/reports",
     "workspace/strategy/digests",
-    # Legacy paths (for existing installs)
-    "01 Daily Logs",
-    "03 Comunidade/reports",
-    "04 Redes Sociais/reports",
-    "05 Financeiro/reports",
-    "02 Projects/licensing-reports",
-    "09 Estrategia/digests",
 ]
 
 

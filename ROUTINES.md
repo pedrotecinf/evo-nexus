@@ -80,30 +80,30 @@ make clean-logs    # Remove logs older than 30 days
 
 | Routine | Format | Saves To |
 |--------|---------|-----------|
-| Good Morning | HTML | `01 Daily Logs/[C] YYYY-MM-DD-morning.html` |
-| Email Triage | HTML | `01 Daily Logs/[C] YYYY-MM-DD-email-triage.html` |
-| Review Todoist | MD | `01 Daily Logs/[C] YYYY-MM-DD-todoist-review.md` |
+| Good Morning | HTML | `workspace/daily-logs/[C] YYYY-MM-DD-morning.html` |
+| Email Triage | HTML | `workspace/daily-logs/[C] YYYY-MM-DD-email-triage.html` |
+| Review Todoist | MD | `workspace/daily-logs/[C] YYYY-MM-DD-todoist-review.md` |
 | Sync Meetings | JSON + MD | `07 Meetings/fathom/` + `summaries/` |
-| End of Day | MD | `01 Daily Logs/[C] YYYY-MM-DD.md` |
+| End of Day | MD | `workspace/daily-logs/[C] YYYY-MM-DD.md` |
 | Memory Sync | MD | `memory/` (individual files) |
-| Weekly Review | HTML + MD | `01 Daily Logs/[C] YYYY-WXX-weekly-review.html` |
-| Trends | HTML + MD | `01 Daily Logs/[C] YYYY-WXX-trends.html` |
+| Weekly Review | HTML + MD | `workspace/daily-logs/[C] YYYY-WXX-weekly-review.html` |
+| Trends | HTML + MD | `workspace/daily-logs/[C] YYYY-WXX-trends.html` |
 | Strategy Digest | HTML + MD | `09 Strategy/digests/[C] YYYY-WXX-strategy-digest.html` |
-| Linear Review | HTML | `02 Projects/linear-reviews/[C] YYYY-MM-DD-linear-review.html` |
-| GitHub Review | HTML | `02 Projects/github-reviews/[C] YYYY-MM-DD-github-review.html` |
+| Linear Review | HTML | `workspace/projects/linear-reviews/[C] YYYY-MM-DD-linear-review.html` |
+| GitHub Review | HTML | `workspace/projects/github-reviews/[C] YYYY-MM-DD-github-review.html` |
 | Community Pulse | HTML | `03 Community/reports/daily/[C] YYYY-MM-DD-community-pulse.html` |
 | Community Weekly | HTML | `03 Community/reports/weekly/[C] YYYY-WXX-community-report.html` |
 | FAQ Sync | MD | `03 Community/[C] FAQ.md` (updates) |
 | Health Check-in | HTML + MD | `06 Personal/health-checkins/reports/[C] YYYY-MM-DD-health.html` |
-| Dashboard | HTML | `01 Daily Logs/[C] YYYY-MM-DD-dashboard.html` |
+| Dashboard | HTML | `workspace/daily-logs/[C] YYYY-MM-DD-dashboard.html` |
 | Financial Pulse | HTML | `05 Finance/reports/daily/[C] YYYY-MM-DD-financial-pulse.html` |
 | Financial Weekly | HTML | `05 Finance/reports/weekly/[C] YYYY-WXX-financial-weekly.html` |
 | Monthly Close | HTML | `05 Finance/reports/monthly/[C] YYYY-MM-monthly-close.html` |
 | Community Monthly | HTML | `03 Community/reports/monthly/[C] YYYY-MM-community-monthly.html` |
 | Social Analytics | HTML | `04 Social/reports/consolidated/[C] YYYY-MM-DD-social-analytics.html` |
-| Licensing Daily | HTML | `02 Projects/licensing-reports/daily/[C] YYYY-MM-DD-licensing-daily.html` |
-| Licensing Weekly | HTML | `02 Projects/licensing-reports/weekly/[C] YYYY-WXX-licensing-weekly.html` |
-| Licensing Monthly | HTML | `02 Projects/licensing-reports/monthly/[C] YYYY-MM-licensing-monthly.html` |
+| Licensing Daily | HTML | `workspace/projects/licensing-reports/daily/[C] YYYY-MM-DD-licensing-daily.html` |
+| Licensing Weekly | HTML | `workspace/projects/licensing-reports/weekly/[C] YYYY-WXX-licensing-weekly.html` |
+| Licensing Monthly | HTML | `workspace/projects/licensing-reports/monthly/[C] YYYY-MM-licensing-monthly.html` |
 
 ### Available HTML Templates
 

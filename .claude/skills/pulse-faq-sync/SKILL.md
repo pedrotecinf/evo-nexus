@@ -12,7 +12,7 @@ Routine that keeps the community FAQ always updated, fed by questions from Disco
 ## Main file
 
 ```
-03 Comunidade/[C] FAQ.md
+workspace/community/[C] FAQ.md
 ```
 
 Este é o arquivo fonte de verdade. Todos os agentes e bots de suporte devem consultar este arquivo.
@@ -83,7 +83,7 @@ O arquivo segue este formato:
 
 ### Step 1 — Read current FAQ
 
-Ler `03 Comunidade/[C] FAQ.md`. Se não existir, criar com a estrutura base.
+Ler `workspace/community/[C] FAQ.md`. Se não existir, criar com a estrutura base.
 
 Contar quantas entradas existem e quais categorias.
 

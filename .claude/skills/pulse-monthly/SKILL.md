@@ -45,7 +45,7 @@ python3 {project-root}/.claude/skills/int-whatsapp/scripts/whatsapp_client.py gr
 2. **Total Mensagens**: Discord + WhatsApp separados e somados
 3. **Novos Membros**: entradas em `🆕・new-members` do Discord no mês
 4. **Taxa de Resolução**: perguntas respondidas / total em #help (meta: >80%)
-5. **Comparison**: comparar todos os KPIs com o mês anterior (ler relatório anterior se existir em `03 Comunidade/reports/monthly/`)
+5. **Comparison**: comparar todos os KPIs com o mês anterior (ler relatório anterior se existir em `workspace/community/reports/monthly/`)
 
 ### Step 5 — Weekly evolution
 
@@ -162,17 +162,17 @@ Para rows dinâmicas, usar o padrão das outras skills pulse:
 
 Save em:
 ```
-03 Comunidade/reports/monthly/[C] YYYY-MM-community-monthly.html
+workspace/community/reports/monthly/[C] YYYY-MM-community-monthly.html
 ```
 
-Create the directory `03 Comunidade/reports/monthly/` if it does not exist.
+Create the directory `workspace/community/reports/monthly/` if it does not exist.
 
 ### Step 14 — Confirm
 
 ```
 ## Community Monthly gerado
 
-**Arquivo:** 03 Comunidade/reports/monthly/[C] YYYY-MM-community-monthly.html
+**Arquivo:** workspace/community/reports/monthly/[C] YYYY-MM-community-monthly.html
 **Mês:** {mês de referência}
 **MAM:** {N} ({delta}%) | **Mensagens:** {N} | **Novos:** {N}
 **Sentimento:** {tendência} | **Resolução:** {X}%

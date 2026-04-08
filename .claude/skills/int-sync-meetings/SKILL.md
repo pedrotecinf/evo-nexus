@@ -5,7 +5,7 @@ description: "Sync meetings from Fathom — fetch new recordings, save JSON, gen
 
 # Sync Meetings
 
-Complete pipeline to sync Fathom meetings and organize them in `09 Reuniões/`.
+Complete pipeline to sync Fathom meetings and organize them in `workspace/meetings/`.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ The API already returns `default_summary.markdown_formatted` e `action_items` co
 
 Read the file of already processed IDs:
 ```
-{project-root}/09 Reuniões/.state/fathom-processed-recording-ids.txt
+{project-root}/workspace/meetings/.state/fathom-processed-recording-ids.txt
 ```
 
 Compare with the returned `recording_id`. Process only IDs that **do not exist** in this file.
@@ -50,7 +50,7 @@ If there are no new meetings, enviar no Telegram "🎙️ Sync Meetings — Nenh
 
 For each new meeting, save the complete JSON to:
 ```
-{project-root}/09 Reuniões/fathom/YYYY-MM-DD/YYYY-MM-DD__{recording_id}__{slug-do-titulo}.json
+{project-root}/workspace/meetings/fathom/YYYY-MM-DD/YYYY-MM-DD__{recording_id}__{slug-do-titulo}.json
 ```
 
 Onde:
@@ -81,7 +81,7 @@ Read the template at `.claude/templates/meeting-summary.md` e and fill with the 
 
 Save em:
 ```
-{project-root}/09 Reuniões/summaries/{projeto}/YYYY-MM-DD__{projeto}__meeting__{slug}__{recording_id}.summary.md
+{project-root}/workspace/meetings/summaries/{projeto}/YYYY-MM-DD__{projeto}__meeting__{slug}__{recording_id}.summary.md
 ```
 
 File format (based on the template):
@@ -114,7 +114,7 @@ For each processed meeting, extract the `action_items` and create tasks in Todoi
 
 1. Verificar no arquivo de estado local:
    ```
-   {project-root}/09 Reuniões/.state/fathom-todoist-sync.json
+   {project-root}/workspace/meetings/.state/fathom-todoist-sync.json
    ```
    If the `recording_id` already has synced tasks, **DO NOT create new tasks**. Skip to Step 7.
 
@@ -155,7 +155,7 @@ Comentário:
 
 Add the `recording_id` to the state file:
 ```
-{project-root}/09 Reuniões/.state/fathom-processed-recording-ids.txt
+{project-root}/workspace/meetings/.state/fathom-processed-recording-ids.txt
 ```
 
 One ID per line. Append, do not overwrite.

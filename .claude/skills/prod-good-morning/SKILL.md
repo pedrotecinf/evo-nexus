@@ -12,7 +12,7 @@ This skill orients a new session by reading recent logs, recapping what happened
 Read these files before saying anything:
 
 1. **CLAUDE.md** — the master context file. This tells you who the user is, what projects are active, and what skills are available.
-2. **Last 3 session logs** — find them in `01 Daily Logs/`, sorted by date, most recent first. These are Claude's previous session notes.
+2. **Last 3 session logs** — find them in `workspace/daily-logs/`, sorted by date, most recent first. These are Claude's previous session notes.
 3. **All active project overviews** — for each project listed in CLAUDE.md, read its overview file. These contain the goal, why, and open problems for each project.
 
 If any of these files don't exist yet (the user might be very new), that's fine — just work with what's there.
@@ -57,9 +57,9 @@ Tell them to say "new project" and the new-project skill will walk them through 
 
 ## Step 5 — Save briefing
 
-Read the template at `.claude/templates/html/morning-briefing.html`, fill all `{{PLACEHOLDER}}` values with the data gathered in Steps 2–3 (agenda, emails, tasks, recommendation), and save the completed HTML to `01 Daily Logs/[C] YYYY-MM-DD-morning.html`.
+Read the template at `.claude/templates/html/morning-briefing.html`, fill all `{{PLACEHOLDER}}` values with the data gathered in Steps 2–3 (agenda, emails, tasks, recommendation), and save the completed HTML to `workspace/daily-logs/[C] YYYY-MM-DD-morning.html`.
 
-Create the `01 Daily Logs/` directory if it does not exist.
+Create the `workspace/daily-logs/` directory if it does not exist.
 
 ## Tone
 

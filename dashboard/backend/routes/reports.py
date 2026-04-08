@@ -14,13 +14,6 @@ REPORT_DIRS = {
     "workspace/finance/reports": "financial",
     "workspace/projects/reports": "projects",
     "workspace/strategy/digests": "strategy",
-    # Legacy paths (for existing installs)
-    "01 Daily Logs": "daily",
-    "03 Comunidade/reports": "community",
-    "04 Redes Sociais/reports": "social",
-    "05 Financeiro/reports": "financial",
-    "02 Projects/licensing-reports": "licensing",
-    "09 Estrategia/digests": "strategy",
 }
 
 

@@ -69,7 +69,7 @@ Analyze as mensagens e identificar:
 
 ### Step 6 — Comparison
 
-Se existirem relatórios anteriores em `03 Comunidade/reports/weekly/`, comparar:
+Se existirem relatórios anteriores em `workspace/community/reports/weekly/`, comparar:
 - WAM esta semana vs anterior
 - Novos membros vs anterior
 - Taxa de resolução vs anterior
@@ -81,11 +81,11 @@ Read the template at `.claude/templates/html/community-weekly-report.html`.
 
 Replace the placeholders `{{...}}` with the actual data.
 
-Logo available at: `02 Projects/Evolution Foundation/Logos finais/Favicon logo/SVG/Favicon Color 500.svg`
+Logo available at: `workspace/projects/Evolution Foundation/Logos finais/Favicon logo/SVG/Favicon Color 500.svg`
 
 Save em:
 ```
-03 Comunidade/reports/weekly/[C] YYYY-WXX-community-report.html
+workspace/community/reports/weekly/[C] YYYY-WXX-community-report.html
 ```
 
 ### Step 8 — Executive summary
@@ -101,7 +101,7 @@ Sentimento: {label}
 Top: {tópico 1}, {tópico 2}, {tópico 3}
 Insights: {N} features, {N} bugs, {N} docs gaps
 
-Report salvo em 03 Comunidade/reports/weekly/
+Report salvo em workspace/community/reports/weekly/
 ```
 
 ## Rules

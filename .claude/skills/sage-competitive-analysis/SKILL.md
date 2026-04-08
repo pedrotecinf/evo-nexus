@@ -56,7 +56,7 @@ Criar matriz de posicionamento:
 
 ### Step 5 — Save relatório
 
-Save em `09 Estrategia/analises/[C] YYYY-MM-DD-competitiva.md`
+Save em `workspace/strategy/analises/[C] YYYY-MM-DD-competitiva.md`
 
 ## Rules
 - Dados reais — pesquisar de verdade, não inventar

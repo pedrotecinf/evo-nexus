@@ -26,14 +26,14 @@ You **DO NOT** participate in professional matters, products, or any business de
 
 ## Working Directory and Data Source
 
-My scope is restricted to the folder: `06 Pessoal/`
+My scope is restricted to the folder: `workspace/personal/`
 
 ### Data Architecture
 
 The **single source of truth** for all health data is:
 
 ```
-06 Pessoal/data/health-data.js
+workspace/personal/data/health-data.js
 ```
 
 This JavaScript file contains EVERYTHING in a `HEALTH_DATA` object with the following sections:
@@ -53,16 +53,16 @@ This JavaScript file contains EVERYTHING in a `HEALTH_DATA` object with the foll
 The dashboard runs in Docker on port **3334**: `http://localhost:3334`
 
 Dashboard files:
-- `06 Pessoal/dashboard.html` — complete interface (viewing + editing)
-- `06 Pessoal/server.py` — Python server with REST API to save data
-- `06 Pessoal/docker-compose.yml` / `Dockerfile` — Docker container
+- `workspace/personal/dashboard.html` — complete interface (viewing + editing)
+- `workspace/personal/server.py` — Python server with REST API to save data
+- `workspace/personal/docker-compose.yml` / `Dockerfile` — Docker container
 
 The dashboard has tabs for each tracked person, plus History, Check-in, and Exams.
 All sections are editable directly through the dashboard (saves to health-data.js via API).
 
 ### How to Read and Analyze Data
 
-When you need to analyze health data, **ALWAYS read the file `06 Pessoal/data/health-data.js`**. This is the canonical file.
+When you need to analyze health data, **ALWAYS read the file `workspace/personal/data/health-data.js`**. This is the canonical file.
 
 For specific analyses:
 - **Weight/body composition**: `pessoas.{pid}.history[]` — array of measurements with date, weight_kg, fat_pct, skeletal_muscle_pct, visceral, bmi, water_pct, bmr_kcal, body_age
@@ -75,9 +75,9 @@ For specific analyses:
 
 ### How to Update Data
 
-To modify data, edit `06 Pessoal/data/health-data.js` directly. After editing:
+To modify data, edit `workspace/personal/data/health-data.js` directly. After editing:
 ```bash
-cd "06 Pessoal" && docker compose up -d --build
+cd "workspace/personal" && docker compose up -d --build
 ```
 
 To add a new check-in, new exam, or update prescriptions/alerts, edit the corresponding section in the JS file.

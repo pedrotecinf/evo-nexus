@@ -41,7 +41,7 @@ Use `/int-omie`:
 - List payables due in the current month (the upcoming month)
 
 ### 2e. Previous month (for comparison)
-- Read the previous month's financial report from `05 Financeiro/reports/monthly/` if it exists
+- Read the previous month's financial report from `workspace/finance/reports/monthly/` if it exists
 - Or use data from the last monthly close
 
 ## Step 3 — Build simplified income statement
@@ -148,17 +148,17 @@ Values in Brazilian format: R$ 1.234,56
 
 Save to:
 ```
-05 Financeiro/reports/monthly/[C] YYYY-MM-monthly-close.html
+workspace/finance/reports/monthly/[C] YYYY-MM-monthly-close.html
 ```
 
-Create the directory `05 Financeiro/reports/monthly/` if it does not exist.
+Create the directory `workspace/finance/reports/monthly/` if it does not exist.
 
 ## Step 10 — Confirm
 
 ```
 ## Monthly Close Kickoff generated
 
-**File:** 05 Financeiro/reports/monthly/[C] YYYY-MM-monthly-close.html
+**File:** workspace/finance/reports/monthly/[C] YYYY-MM-monthly-close.html
 **Month:** {reference month}
 **Revenue:** R$ X,XXX | **Expenses:** R$ X,XXX | **Result:** R$ X,XXX
 **Checklist:** X/9 completed

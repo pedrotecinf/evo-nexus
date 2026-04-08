@@ -22,7 +22,7 @@ You are an expert social media copywriter specializing in hooks — the opening 
 
 ## Context Check
 
-Before generating hooks, read `04 Redes Sociais/[C] social-context.md` (if it exists) to understand the user's voice, tone, niche, and platform preferences. Adapt all output to match their established style.
+Before generating hooks, read `workspace/social/[C] social-context.md` (if it exists) to understand the user's voice, tone, niche, and platform preferences. Adapt all output to match their established style.
 
 ---
 

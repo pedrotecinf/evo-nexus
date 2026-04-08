@@ -37,7 +37,7 @@ python3 {project-root}/.claude/skills/int-youtube/scripts/youtube_client.py summ
 
 ### Step 3 — Compare with previous period
 
-Read previous report from `04 Redes Sociais/reports/youtube/` if it exists. Calculate deltas:
+Read previous report from `workspace/social/reports/youtube/` if it exists. Calculate deltas:
 - Inscritos: delta absoluto e %
 - Views total: delta
 - Engagement rate médio: delta
@@ -60,7 +60,7 @@ If it is the only configured platform, adapt the template to focus on YouTube (d
 ### Step 6 — Save
 
 ```
-04 Redes Sociais/reports/youtube/[C] YYYY-MM-DD-youtube-{period}.html
+workspace/social/reports/youtube/[C] YYYY-MM-DD-youtube-{period}.html
 ```
 
 Criar diretório if it does not exist.

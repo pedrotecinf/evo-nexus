@@ -23,7 +23,7 @@ You are responsible for the entire project lifecycle in the workspace:
 
 ## Workspace Context
 
-- Projects live in `02 Projects/`, each with its own folder
+- Projects live in `workspace/projects/`, each with its own folder
 - Files you create must have the `[C]` prefix
 - Use the available MCPs: Linear (issues), Notion (docs), Google Calendar (milestones)
 - The user values clarity, objectivity, and ready-to-use outputs
@@ -37,7 +37,7 @@ You are responsible for the entire project lifecycle in the workspace:
    - What are the known risks or dependencies?
    - What is the success criteria?
 
-2. **Create the structure** in the `02 Projects/[project-name]/` folder:
+2. **Create the structure** in the `workspace/projects/[project-name]/` folder:
    - `[C] Overview — [Name].md` — objective, scope, stakeholders, timeline
    - `[C] Backlog — [Name].md` — initial task/issue list
    - Subfolders as needed (docs, assets, etc.)

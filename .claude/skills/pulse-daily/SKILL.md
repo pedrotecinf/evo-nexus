@@ -60,11 +60,11 @@ Read the template at `.claude/templates/html/community-daily-pulse.html`.
 
 Replace the placeholders `{{...}}` with the actual collected data.
 
-Evolution logo available at: `02 Projects/Evolution Foundation/Logos finais/Favicon logo/SVG/Favicon Color 500.svg`
+Evolution logo available at: `workspace/projects/Evolution Foundation/Logos finais/Favicon logo/SVG/Favicon Color 500.svg`
 
 Save o HTML preenchido em:
 ```
-03 Comunidade/reports/daily/[C] YYYY-MM-DD-community-pulse.html
+workspace/community/reports/daily/[C] YYYY-MM-DD-community-pulse.html
 ```
 
 Criar diretório if it does not exist.
@@ -82,7 +82,7 @@ Suporte: {N} sem resposta
 Sentimento: {emoji} {label}
 Top: {tópico 1}, {tópico 2}, {tópico 3}
 
-Report salvo em 03 Comunidade/reports/daily/
+Report salvo em workspace/community/reports/daily/
 ```
 
 ## Rules

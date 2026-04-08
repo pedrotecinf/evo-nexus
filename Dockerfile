@@ -37,13 +37,13 @@ ENV TZ=America/Sao_Paulo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Volumes for persistent data
-VOLUME ["/workspace/01 Daily Logs", \
-        "/workspace/02 Projects", \
-        "/workspace/03 Comunidade", \
-        "/workspace/05 Financeiro", \
-        "/workspace/06 Pessoal", \
-        "/workspace/07 Reuniões", \
-        "/workspace/09 Estrategia", \
+VOLUME ["/workspace/workspace/daily-logs", \
+        "/workspace/workspace/projects", \
+        "/workspace/workspace/community", \
+        "/workspace/workspace/finance", \
+        "/workspace/workspace/personal", \
+        "/workspace/workspace/meetings", \
+        "/workspace/workspace/strategy", \
         "/workspace/memory", \
         "/workspace/ADWs/logs", \
         "/workspace/.claude/agent-memory"]

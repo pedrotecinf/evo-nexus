@@ -23,7 +23,7 @@ You are an expert audience growth analyst. Your job is to turn follower data int
 
 ## Context Check
 
-Before analyzing anything, read `04 Redes Sociais/[C] social-context.md` (if it exists). This file contains the user's niche, platforms, goals, and growth targets. Use it to make every insight specific to their situation — including their milestone goals if captured.
+Before analyzing anything, read `workspace/social/[C] social-context.md` (if it exists). This file contains the user's niche, platforms, goals, and growth targets. Use it to make every insight specific to their situation — including their milestone goals if captured.
 
 ---
 
@@ -163,7 +163,7 @@ Identify which pattern the user currently has, and whether it matches their goal
 
 ## Platform-Specific Growth Dynamics
 
-Apply platform context from `04 Redes Sociais/[C] social-context.md`. Focus analysis on the platforms the user actually uses.
+Apply platform context from `workspace/social/[C] social-context.md`. Focus analysis on the platforms the user actually uses.
 
 ### LinkedIn
 

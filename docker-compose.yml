@@ -9,13 +9,13 @@ services:
       - TZ=America/Sao_Paulo
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
-      - daily-logs:/workspace/01 Daily Logs
-      - projects:/workspace/02 Projects
-      - comunidade:/workspace/03 Comunidade
-      - financeiro:/workspace/05 Financeiro
-      - pessoal:/workspace/06 Pessoal
-      - reunioes:/workspace/07 Reuniões
-      - estrategia:/workspace/09 Estrategia
+      - daily-logs:/workspace/workspace/daily-logs
+      - projects:/workspace/workspace/projects
+      - comunidade:/workspace/workspace/community
+      - financeiro:/workspace/workspace/finance
+      - pessoal:/workspace/workspace/personal
+      - reunioes:/workspace/workspace/meetings
+      - estrategia:/workspace/workspace/strategy
       - memory:/workspace/memory
       - adw-logs:/workspace/ADWs/logs
       - agent-memory:/workspace/.claude/agent-memory
@@ -37,13 +37,13 @@ services:
       - TZ=America/Sao_Paulo
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
-      - daily-logs:/workspace/01 Daily Logs
-      - projects:/workspace/02 Projects
-      - comunidade:/workspace/03 Comunidade
-      - financeiro:/workspace/05 Financeiro
-      - pessoal:/workspace/06 Pessoal
-      - reunioes:/workspace/07 Reuniões
-      - estrategia:/workspace/09 Estrategia
+      - daily-logs:/workspace/workspace/daily-logs
+      - projects:/workspace/workspace/projects
+      - comunidade:/workspace/workspace/community
+      - financeiro:/workspace/workspace/finance
+      - pessoal:/workspace/workspace/personal
+      - reunioes:/workspace/workspace/meetings
+      - estrategia:/workspace/workspace/strategy
       - memory:/workspace/memory
       - adw-logs:/workspace/ADWs/logs
       - agent-memory:/workspace/.claude/agent-memory
@@ -61,13 +61,13 @@ services:
       - TZ=America/Sao_Paulo
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
-      - daily-logs:/workspace/01 Daily Logs
-      - projects:/workspace/02 Projects
-      - comunidade:/workspace/03 Comunidade
-      - financeiro:/workspace/05 Financeiro
-      - pessoal:/workspace/06 Pessoal
-      - reunioes:/workspace/07 Reuniões
-      - estrategia:/workspace/09 Estrategia
+      - daily-logs:/workspace/workspace/daily-logs
+      - projects:/workspace/workspace/projects
+      - comunidade:/workspace/workspace/community
+      - financeiro:/workspace/workspace/finance
+      - pessoal:/workspace/workspace/personal
+      - reunioes:/workspace/workspace/meetings
+      - estrategia:/workspace/workspace/strategy
       - memory:/workspace/memory
       - adw-logs:/workspace/ADWs/logs
       - agent-memory:/workspace/.claude/agent-memory

@@ -24,7 +24,7 @@ This skill produces a **content strategy document** the user can reference when 
 
 ## Step 1 — Check for existing context
 
-Before asking any questions, check if `04 Redes Sociais/[C] social-context.md` exists.
+Before asking any questions, check if `workspace/social/[C] social-context.md` exists.
 
 **If it exists:**
 1. Read the file in full.

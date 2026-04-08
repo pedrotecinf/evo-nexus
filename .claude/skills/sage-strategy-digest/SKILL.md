@@ -15,23 +15,23 @@ Weekly routine that consolidates data from all areas into a strategic view for d
 
 **Financeiro:**
 - Consultar `/int-stripe` — MRR atual, variação, novas assinaturas, churn, reembolsos
-- Se disponível, ler último relatório em `05 Financeiro/`
+- Se disponível, ler último relatório em `workspace/finance/`
 
 **Produto:**
-- Ler último `/int-linear-review` em `02 Projects/linear-reviews/`
-- Ler último `/int-github-review` em `02 Projects/github-reviews/`
+- Ler último `/int-linear-review` em `workspace/projects/linear-reviews/`
+- Ler último `/int-github-review` em `workspace/projects/github-reviews/`
 - Resumir: entregas da semana, blockers, PRs, issues da comunidade
 
 **Comunidade:**
-- Ler último relatório em `03 Comunidade/reports/weekly/`
+- Ler último relatório em `workspace/community/reports/weekly/`
 - Resumir: WAM, sentimento, tópicos quentes, FAQ gaps
 
 **Comercial:**
-- Se existir pipeline em `02 Projects/comercial/`, ler status
+- Se existir pipeline em `workspace/projects/comercial/`, ler status
 - Verificar parcerias ativas
 
 **Tendências:**
-- Ler último trends report em `01 Daily Logs/`
+- Ler último trends report em `workspace/daily-logs/`
 
 ### Step 2 — Analyze estrategicamente
 
@@ -45,9 +45,9 @@ Cruzar os dados e responder:
 
 ### Step 3 — Generate digest (HTML + MD)
 
-**HTML:** Read the template at `.claude/templates/html/strategy-digest.html`, preencher todos os `{{PLACEHOLDER}}` com os dados coletados e salvar em `09 Estrategia/digests/[C] YYYY-WXX-strategy-digest.html`. Create the directory if it does not exist.
+**HTML:** Read the template at `.claude/templates/html/strategy-digest.html`, preencher todos os `{{PLACEHOLDER}}` com os dados coletados e salvar em `workspace/strategy/digests/[C] YYYY-WXX-strategy-digest.html`. Create the directory if it does not exist.
 
-**MD:** Também salvar versão markdown em `09 Estrategia/digests/[C] YYYY-WXX-strategy-digest.md` com o seguinte formato:
+**MD:** Também salvar versão markdown em `workspace/strategy/digests/[C] YYYY-WXX-strategy-digest.md` com o seguinte formato:
 
 ```markdown
 # Strategy Digest — Semana {WXX}

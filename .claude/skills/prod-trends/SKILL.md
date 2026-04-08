@@ -13,8 +13,8 @@ Routine that compares community, GitHub, and financial metrics week-over-week to
 
 ### 1. Comunidade (Discord)
 Ler relatórios anteriores em:
-- `03 Comunidade/reports/daily/` — pulsos diários (HTML)
-- `03 Comunidade/reports/weekly/` — relatórios semanais (HTML)
+- `workspace/community/reports/daily/` — pulsos diários (HTML)
+- `workspace/community/reports/weekly/` — relatórios semanais (HTML)
 
 Extrair do HTML ou gerar a partir dos dados:
 - Mensagens por dia (volume)
@@ -25,7 +25,7 @@ Extrair do HTML ou gerar a partir dos dados:
 
 ### 2. GitHub
 Ler relatórios anteriores em:
-- `02 Projects/github-reviews/` — reviews (HTML)
+- `workspace/projects/github-reviews/` — reviews (HTML)
 
 Extrair ou gerar:
 - PRs abertos (tendência: acumulando ou sendo resolvidos?)
@@ -100,9 +100,9 @@ Classificação do health geral:
 
 **OBRIGATÓRIO:** Sempre gerar o HTML primeiro. Ler o template, substituir os placeholders, e salvar o arquivo HTML completo. Isso vale inclusive na primeira execução (baseline) — mesmo sem comparativo, preencher o scorecard com os valores atuais e "—" no anterior.
 
-Save HTML em `01 Daily Logs/[C] YYYY-WXX-trends.html`.
+Save HTML em `workspace/daily-logs/[C] YYYY-WXX-trends.html`.
 
-Depois, salvar também uma versão markdown resumida em `01 Daily Logs/[C] YYYY-WXX-trends.md`:
+Depois, salvar também uma versão markdown resumida em `workspace/daily-logs/[C] YYYY-WXX-trends.md`:
 
 ```markdown
 # Análise de Tendências — Semana {WXX}

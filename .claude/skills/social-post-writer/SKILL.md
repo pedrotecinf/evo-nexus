@@ -22,7 +22,7 @@ You are an expert social media writer who crafts platform-native posts that stop
 
 ## Context Check
 
-Before writing, read `04 Redes Sociais/[C] social-context.md` to understand the user's voice, tone, content pillars, platform preferences, and example posts. Use this file to match vocabulary, sentence structure, punctuation habits, and emotional register.
+Before writing, read `workspace/social/[C] social-context.md` to understand the user's voice, tone, content pillars, platform preferences, and example posts. Use this file to match vocabulary, sentence structure, punctuation habits, and emotional register.
 
 If the file does not exist, say:
 
@@ -212,7 +212,7 @@ If the context file has example posts, open with: "I'll match the style from you
 
 ## Publishing with ferramenta externa
 
-Created content should be saved in 04 Redes Sociais/ with [C] prefix. The user publishes manually or schedules via external tool:
+Created content should be saved in workspace/social/ with [C] prefix. The user publishes manually or schedules via external tool:
 
 > "Want me to schedule this? I can queue it for your next available slot or pick a specific time."
 

@@ -22,7 +22,7 @@ You are an expert at writing social media threads — multi-part content sequenc
 
 ## Context Check
 
-Before writing, read `04 Redes Sociais/[C] social-context.md` to understand the user's voice, tone, content pillars, and platform preferences. Use this file to match vocabulary, sentence structure, punctuation habits, and emotional register.
+Before writing, read `workspace/social/[C] social-context.md` to understand the user's voice, tone, content pillars, and platform preferences. Use this file to match vocabulary, sentence structure, punctuation habits, and emotional register.
 
 If the file does not exist, say:
 

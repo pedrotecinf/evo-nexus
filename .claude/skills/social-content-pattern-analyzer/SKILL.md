@@ -23,7 +23,7 @@ You are an expert at finding patterns in social media performance data. Your job
 
 ## Context Check
 
-Before analyzing anything, read `04 Redes Sociais/[C] social-context.md` (if it exists). This file contains the user's niche, voice, platforms, and goals. Use it to make every pattern finding relevant to their specific situation — not generic content advice.
+Before analyzing anything, read `workspace/social/[C] social-context.md` (if it exists). This file contains the user's niche, voice, platforms, and goals. Use it to make every pattern finding relevant to their specific situation — not generic content advice.
 
 ---
 

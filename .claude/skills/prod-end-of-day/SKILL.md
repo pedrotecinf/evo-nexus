@@ -24,7 +24,7 @@ Ler os arquivos de memória recentes de cada agente em `.claude/agent-memory/`:
 Ler o log JSONL de hoje em `ADWs/logs/YYYY-MM-DD.jsonl` para ver quais rotinas rodaram, duração e status.
 
 ### 1c. Reuniões do dia
-Verificar `09 Reuniões/summaries/` e `09 Reuniões/fathom/` do dia para reuniões que foram sincronizadas.
+Verificar `workspace/meetings/summaries/` e `workspace/meetings/fathom/` do dia para reuniões que foram sincronizadas.
 
 ### 1d. Tarefas
 Rodar `todoist today` para ver tarefas concluídas e pendentes do dia.
@@ -60,7 +60,7 @@ Read the template at `.claude/templates/end-of-day-log.md` e preencher com os da
 
 Save em:
 ```
-01 Daily Logs/[C] YYYY-MM-DD.md
+workspace/daily-logs/[C] YYYY-MM-DD.md
 ```
 
 O log deve incluir:
@@ -81,7 +81,7 @@ Present a short summary:
 ```
 ## Dia encerrado
 
-**Log:** 01 Daily Logs/[C] YYYY-MM-DD.md
+**Log:** workspace/daily-logs/[C] YYYY-MM-DD.md
 **Rotinas ADW:** {N} executadas ({status})
 **Tarefas:** {concluídas}/{total} concluídas
 **Memórias:** {N} criadas/atualizadas

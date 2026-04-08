@@ -123,17 +123,17 @@ Values in Brazilian format: R$ 1.234,56
 
 Save to:
 ```
-05 Financeiro/reports/weekly/[C] YYYY-WXX-financial-weekly.html
+workspace/finance/reports/weekly/[C] YYYY-WXX-financial-weekly.html
 ```
 
-Create the directory `05 Financeiro/reports/weekly/` if it does not exist.
+Create the directory `workspace/finance/reports/weekly/` if it does not exist.
 
 ## Step 11 — Confirm
 
 ```
 ## Financial Weekly generated
 
-**File:** 05 Financeiro/reports/weekly/[C] YYYY-WXX-financial-weekly.html
+**File:** workspace/finance/reports/weekly/[C] YYYY-WXX-financial-weekly.html
 **Revenue:** R$ X,XXX ({var}%) | **Expenses:** R$ X,XXX ({var}%)
 **MRR:** R$ X,XXX | **Projected 30d balance:** R$ XX,XXX
 **Alerts:** {N} overdue accounts | {N} pending invoices

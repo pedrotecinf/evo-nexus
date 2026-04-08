@@ -13,12 +13,12 @@ Skill to review, update, or define quarterly company OKRs.
 
 ### If OKRs already exist (update)
 
-1. Read the most recent OKRs file from `09 Estrategia/okrs/`
+1. Read the most recent OKRs file from `workspace/strategy/okrs/`
 2. For each Key Result, fetch updated data:
    - Financial metrics → `/int-stripe` (MRR, assinaturas)
    - Product metrics → `/int-linear-review` (issues, entregas)
-   - Community metrics → ler relatórios em `03 Comunidade/reports/`
-   - GitHub metrics → ler relatórios em `02 Projects/github-reviews/`
+   - Community metrics → ler relatórios em `workspace/community/reports/`
+   - GitHub metrics → ler relatórios em `workspace/projects/github-reviews/`
 3. Calculate progress for each KR (0-100%)
 4. Classify: 🟢 on track (>70%) | 🟡 at risk (40-70%) | 🔴 off track (<40%)
 5. Update the OKRs file with new data
@@ -29,7 +29,7 @@ Skill to review, update, or define quarterly company OKRs.
 1. Interview the user about the quarter's priorities
 2. Propose 3-4 Objectives with 3-4 Key Results each
 3. Each KR must be: measurable, with baseline and target, with deadline
-4. Save em `09 Estrategia/okrs/[C] YYYY-QX-okrs.md`
+4. Save em `workspace/strategy/okrs/[C] YYYY-QX-okrs.md`
 
 ## OKR file format
 

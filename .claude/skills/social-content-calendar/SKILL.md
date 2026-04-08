@@ -24,7 +24,7 @@ This skill produces a **content calendar** the user can follow, schedule in adva
 
 ## Step 1 — Check for existing context
 
-Before asking any questions, check if `04 Redes Sociais/[C] social-context.md` exists.
+Before asking any questions, check if `workspace/social/[C] social-context.md` exists.
 
 **If it exists:**
 1. Read the file in full.
