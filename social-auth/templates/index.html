@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Social Connections — Evolution</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --evo-green: #00FFA7;
+    --bg-primary: #0C111D;
+    --bg-card: #182230;
+    --bg-card-hover: #1e2a3a;
+    --border: #344054;
+    --text-primary: #F9FAFB;
+    --text-secondary: #D0D5DD;
+    --text-muted: #667085;
+    --red: #F04438;
+    --yellow: #F79009;
+    --green: #12B76A;
+    --blue: #2E90FA;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; }
+  .header { background: linear-gradient(135deg, var(--bg-primary) 0%, #0a1628 50%, var(--bg-primary) 100%); border-bottom: 1px solid var(--border); padding: 32px 40px; text-align: center; }
+  .header h1 { font-size: 24px; font-weight: 700; }
+  .header h1 span { color: var(--evo-green); }
+  .header .subtitle { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+  .container { max-width: 700px; margin: 32px auto; padding: 0 20px; }
+
+  /* Platform section */
+  .platform-section { margin-bottom: 24px; }
+  .platform-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; margin-bottom: 8px;
+  }
+  .platform-header-left { display: flex; align-items: center; gap: 12px; }
+  .platform-icon { font-size: 24px; width: 36px; text-align: center; }
+  .platform-name { font-size: 18px; font-weight: 600; }
+
+  .btn {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-add { background: rgba(0,255,167,0.15); color: var(--evo-green); }
+  .btn-add:hover { background: rgba(0,255,167,0.25); }
+  .btn-connect { background: var(--evo-green); color: var(--bg-primary); }
+  .btn-connect:hover { opacity: 0.9; }
+  .btn-disconnect { background: rgba(240,68,56,0.1); color: var(--red); font-size: 12px; padding: 6px 12px; }
+  .btn-disconnect:hover { background: rgba(240,68,56,0.2); }
+  .btn-renew { background: rgba(247,144,9,0.15); color: var(--yellow); font-size: 12px; padding: 6px 12px; }
+
+  /* Account card */
+  .account-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    transition: border-color 0.2s;
+  }
+  .account-card:hover { border-color: rgba(0,255,167,0.3); }
+  .account-info { display: flex; align-items: center; gap: 12px; flex: 1; }
+  .account-label { font-size: 14px; font-weight: 500; }
+  .account-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .account-actions { display: flex; align-items: center; gap: 8px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600;
+  }
+  .badge.connected { background: rgba(18,183,106,0.15); color: var(--green); }
+  .badge.expiring { background: rgba(247,144,9,0.15); color: var(--yellow); }
+  .badge.expired { background: rgba(240,68,56,0.15); color: var(--red); }
+  .badge.disconnected { background: rgba(102,112,133,0.15); color: var(--text-muted); }
+  .badge .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .badge.connected .dot { background: var(--green); }
+  .badge.expiring .dot { background: var(--yellow); }
+  .badge.expired .dot { background: var(--red); }
+  .badge.disconnected .dot { background: var(--text-muted); }
+
+  /* Empty state */
+  .empty-state {
+    background: var(--bg-card); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;
+  }
+
+  .toast {
+    position: fixed; top: 20px; right: 20px; background: var(--green);
+    color: var(--bg-primary); padding: 12px 24px; border-radius: 8px;
+    font-weight: 600; font-size: 14px; display: none; z-index: 100;
+  }
+  .toast.show { display: block; animation: fadeout 3s forwards; }
+  @keyframes fadeout { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
+
+  .divider { height: 1px; background: var(--border); margin: 8px 0 24px; }
+  .footer { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; }
+  .footer span { color: var(--evo-green); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>Evolution</span> — Social Connections</h1>
+  <div class="subtitle">Conecte múltiplas contas por plataforma para coleta automatizada</div>
+</div>
+
+{% if saved %}
+<div class="toast show">{{ saved }} conectado com sucesso!</div>
+{% endif %}
+
+<div class="container">
+  {% for platform in platforms %}
+  <div class="platform-section">
+    <div class="platform-header">
+      <div class="platform-header-left">
+        <span class="platform-icon">{{ platform.icon }}</span>
+        <span class="platform-name">{{ platform.name }}</span>
+      </div>
+      <a href="/connect/{{ platform.id }}" class="btn btn-add">+ Adicionar conta</a>
+    </div>
+
+    {% if platform.accounts %}
+      {% for account in platform.accounts %}
+      <div class="account-card">
+        <div class="account-info">
+          <div>
+            <div class="account-label">{{ account.label }}</div>
+            <div class="account-detail">{{ account.detail }}</div>
+          </div>
+        </div>
+        <div class="account-actions">
+          <span class="badge {{ account.status }}">
+            <span class="dot"></span>
+            {% if account.status == 'connected' %}Conectado
+            {% elif account.status == 'expiring' %}Expira em {{ account.days_left }}d
+            {% elif account.status == 'expired' %}Expirado
+            {% else %}Incompleto{% endif %}
+          </span>
+          {% if account.status == 'expiring' %}
+          <a href="/connect/{{ platform.id }}?renew={{ account.index }}" class="btn btn-renew">Renovar</a>
+          {% endif %}
+          {% if account.status == 'expired' %}
+          <a href="/connect/{{ platform.id }}?renew={{ account.index }}" class="btn btn-renew">Reconectar</a>
+          {% endif %}
+          <form action="/disconnect/{{ platform.id }}/{{ account.index }}" method="POST" style="display:inline;">
+            <button type="submit" class="btn btn-disconnect">Remover</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">Nenhuma conta conectada</div>
+    {% endif %}
+  </div>
+
+  {% if not loop.last %}<div class="divider"></div>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="footer">
+  <span>Evolution Foundation</span> — Social Auth App — localhost:8765
+</div>
+
+</body>
+</html>

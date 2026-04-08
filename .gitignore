@@ -1,0 +1,67 @@
+# ══════════════════════════════════════════
+# OpenClaude — .gitignore
+# Framework files are tracked.
+# Personal data, secrets, and runtime output are NOT.
+# ══════════════════════════════════════════
+
+# ── Secrets & credentials ─────────────────
+.env
+.claude/.env
+
+# ── Personal workspace data ───────────────
+# These folders contain user-specific data (logs, reports, finance, health, etc.)
+# The folder STRUCTURE is defined by setup, but contents are private.
+01 Daily Logs/
+02 Projects/
+03 Comunidade/
+04 Redes Sociais/
+05 Financeiro/
+06 Pessoal/
+07 Reuniões/
+08 Cursos/
+09 Estrategia/
+09 Reuniões/
+
+# ── Agent memory (runtime, personal) ──────
+.claude/agent-memory/
+memory/
+
+# ── Product-specific (Evolution API proprietary) ─
+.claude/skills/int-licensing/
+.claude/skills/int-whatsapp/
+.claude/skills/prod-licensing-daily/
+.claude/skills/prod-licensing-weekly/
+.claude/skills/prod-licensing-monthly/
+.claude/templates/html/licensing-report.html
+ADWs/rotinas/licensing_daily.py
+ADWs/rotinas/licensing_weekly.py
+ADWs/rotinas/licensing_monthly.py
+
+# ── Runtime data & logs ───────────────────
+ADWs/logs/
+dashboard/data/*.db
+dashboard/data/.secret_key
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+
+# ── Evo Method output ────────────────────
+_evo-output/
+
+# ── Python ────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+
+# ── OS ────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Generated configs (personal) ─────────
+CLAUDE.md
+config/workspace.yaml
+
+# ── Claude Code session data ─────────────
+.claude/projects/
+.claude/image-cache/
+.claude/todos/
+.claude/TASKS.md

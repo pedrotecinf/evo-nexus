@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório Mensal da Comunidade — Evolution Foundation</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --evo-green: #00FFA7;
+    --evo-green-dark: #00C681;
+    --evo-purple: #8133AA;
+    --bg-primary: #0C111D;
+    --bg-card: #182230;
+    --bg-card-hover: #1e2a3a;
+    --border: #344054;
+    --text-primary: #F9FAFB;
+    --text-secondary: #D0D5DD;
+    --text-muted: #667085;
+    --red: #F04438;
+    --yellow: #F79009;
+    --green: #12B76A;
+    --blue: #2E90FA;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; }
+  .header { background: linear-gradient(135deg, var(--bg-primary) 0%, #0a1628 50%, var(--bg-primary) 100%); border-bottom: 1px solid var(--border); padding: 32px 40px; display: flex; justify-content: space-between; align-items: center; }
+  .header-left h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+  .header-left h1 span { color: var(--evo-green); }
+  .header-left .subtitle { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 40px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+  .metric-card:hover { border-color: var(--evo-green); }
+  .metric-card .label { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-card .value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin: 8px 0 4px; }
+  .metric-card .delta { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .metric-card .delta.up { color: var(--green); }
+  .metric-card .delta.down { color: var(--red); }
+  .metric-card .delta.neutral { color: var(--text-muted); }
+  .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+  .section-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .section-header h2 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .section-header .count { background: var(--bg-primary); color: var(--text-muted); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 100px; }
+  .section-body { padding: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 20px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; background: rgba(0,0,0,0.2); }
+  th.right, td.right { text-align: right; }
+  td { padding: 12px 20px; font-size: 14px; color: var(--text-secondary); border-top: 1px solid rgba(52,64,84,0.5); }
+  tr:hover td { background: var(--bg-card-hover); }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+  .badge.red { background: rgba(240,68,56,0.15); color: var(--red); }
+  .badge.yellow { background: rgba(247,144,9,0.15); color: var(--yellow); }
+  .badge.green { background: rgba(18,183,106,0.15); color: var(--green); }
+  .badge.blue { background: rgba(46,144,250,0.15); color: var(--blue); }
+  .badge.purple { background: rgba(129,51,170,0.15); color: var(--evo-purple); }
+  .badge.muted { background: rgba(102,112,133,0.15); color: var(--text-muted); }
+  .metric-row { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(52,64,84,0.5); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .mr-label { font-size: 14px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .metric-row .mr-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.green { background: var(--green); }
+  .status-dot.yellow { background: var(--yellow); }
+  .status-dot.red { background: var(--red); }
+  .highlight-card { background: linear-gradient(135deg, rgba(0,255,167,0.05) 0%, rgba(129,51,170,0.05) 100%); border: 1px solid rgba(0,255,167,0.2); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
+  .highlight-card .title { font-size: 12px; font-weight: 600; color: var(--evo-green); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .highlight-card .body { font-size: 15px; color: var(--text-secondary); line-height: 1.6; }
+  .list-item { padding: 12px 20px; display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid rgba(52,64,84,0.5); font-size: 14px; color: var(--text-secondary); }
+  .list-item:last-child { border-bottom: none; }
+  .list-item::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--evo-green); margin-top: 5px; flex-shrink: 0; }
+  .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 4px; }
+  .progress-bar-fill.evo { background: var(--evo-green); }
+  .progress-bar-fill.green { background: var(--green); }
+  .progress-bar-fill.yellow { background: var(--yellow); }
+  .progress-bar-fill.red { background: var(--red); }
+  .footer { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); }
+  .footer span { color: var(--evo-green); }
+  @media (max-width: 900px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .two-col { grid-template-columns: 1fr; } .container { padding: 20px; } .header { padding: 20px; flex-direction: column; gap: 16px; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1><span>Community</span> Monthly Report</h1>
+    <div class="subtitle">{{MES_REFERENCIA}} — Discord + WhatsApp — Relatório mensal</div>
+  </div>
+  <div class="header-right">
+    <span class="badge {{SAUDE_CLASS}}">{{SAUDE_LABEL}}</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- KPIs DO MÊS                                    -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="grid-4">
+    <div class="metric-card">
+      <div class="label">MAM (Monthly Active Members)</div>
+      <div class="value">{{MAM_VALOR}}</div>
+      <div class="delta {{MAM_DELTA_CLASS}}">{{MAM_DELTA}} vs mês anterior</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Total Mensagens</div>
+      <div class="value">{{MSGS_TOTAL}}</div>
+      <div class="delta {{MSGS_DELTA_CLASS}}">{{MSGS_DELTA}} vs mês anterior</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Novos Membros</div>
+      <div class="value">{{NOVOS_MEMBROS}}</div>
+      <div class="delta {{NOVOS_DELTA_CLASS}}">{{NOVOS_DELTA}} vs mês anterior</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Taxa de Resolução</div>
+      <div class="value">{{TAXA_RESOLUCAO}}</div>
+      <div class="delta {{RESOLUCAO_DELTA_CLASS}}">{{RESOLUCAO_DELTA}} vs mês anterior</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- EVOLUÇÃO SEMANAL (4 semanas)                   -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Evolução Semanal</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Semana</th>
+            <th class="right">Mensagens</th>
+            <th class="right">Ativos</th>
+            <th class="right">Novos</th>
+            <th class="right">Sentimento</th>
+            <th class="right">Suporte Aberto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{SEMANAS_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- DISCORD + WHATSAPP SIDE BY SIDE                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="two-col">
+    <!-- Discord -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Discord</h2>
+        <span class="badge {{DISCORD_STATUS_CLASS}}">{{DISCORD_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{DISCORD_MSGS_DOT}}"></span>Mensagens</div>
+          <div class="mr-value">{{DISCORD_MSGS}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{DISCORD_ATIVOS_DOT}}"></span>Membros Ativos</div>
+          <div class="mr-value">{{DISCORD_ATIVOS}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{DISCORD_HELP_DOT}}"></span>Tickets Suporte</div>
+          <div class="mr-value">{{DISCORD_HELP}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{DISCORD_SENTIMENTO_DOT}}"></span>Sentimento</div>
+          <div class="mr-value">{{DISCORD_SENTIMENTO}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WhatsApp -->
+    <div class="section">
+      <div class="section-header">
+        <h2>WhatsApp</h2>
+        <span class="badge {{WHATSAPP_STATUS_CLASS}}">{{WHATSAPP_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{WA_MSGS_DOT}}"></span>Mensagens</div>
+          <div class="mr-value">{{WA_MSGS}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{WA_GRUPOS_DOT}}"></span>Grupos Ativos</div>
+          <div class="mr-value">{{WA_GRUPOS}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{WA_PARTICIPANTES_DOT}}"></span>Participantes Únicos</div>
+          <div class="mr-value">{{WA_PARTICIPANTES}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{WA_SENTIMENTO_DOT}}"></span>Sentimento</div>
+          <div class="mr-value">{{WA_SENTIMENTO}}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TOP CONTRIBUIDORES                             -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Top Contribuidores do Mês</h2>
+      <span class="count">{{TOP_COUNT}}</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Membro</th>
+            <th>Plataforma</th>
+            <th class="right">Mensagens</th>
+            <th class="right">Respostas Dadas</th>
+            <th>Destaque</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{TOP_CONTRIBUIDORES_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TÓPICOS DO MÊS                                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Tópicos Mais Discutidos</h2>
+    </div>
+    <div class="section-body">
+      {{TOPICOS_ROWS}}
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- INSIGHTS PRODUTO                               -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="two-col">
+    <div class="section">
+      <div class="section-header">
+        <h2>Features Solicitadas</h2>
+        <span class="count">{{FEATURES_COUNT}}</span>
+      </div>
+      <div class="section-body">
+        {{FEATURES_ROWS}}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h2>Bugs Reportados</h2>
+        <span class="count">{{BUGS_COUNT}}</span>
+      </div>
+      <div class="section-body">
+        {{BUGS_ROWS}}
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- DOCS GAPS                                      -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Docs Gaps — Perguntas Recorrentes sem Documentação</h2>
+      <span class="count">{{DOCS_GAPS_COUNT}}</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Pergunta</th>
+            <th>Fonte</th>
+            <th class="right">Frequência</th>
+            <th>Categoria</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{DOCS_GAPS_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SENTIMENTO — TENDÊNCIA MENSAL                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Tendência de Sentimento</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Semana</th>
+            <th class="right">Positivo</th>
+            <th class="right">Neutro</th>
+            <th class="right">Negativo</th>
+            <th>Tendência</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{SENTIMENTO_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ANÁLISE & RECOMENDAÇÕES                        -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="highlight-card">
+    <div class="title">Análise do Mês</div>
+    <div class="body">{{ANALISE_MES}}</div>
+  </div>
+
+  <div class="highlight-card">
+    <div class="title">Recomendações</div>
+    <div class="body">{{RECOMENDACOES}}</div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  Gerado automaticamente por <span>Evolution Foundation</span> — Agente Pulse — {{TIMESTAMP}}
+</div>
+
+</body>
+</html>

@@ -1,0 +1,178 @@
+# OpenClaude — Routine Definitions
+# Each routine maps to a script in ADWs/rotinas/
+# Edit times, enable/disable, or add new routines as needed.
+#
+# Fields:
+#   name:     Display name
+#   script:   Python script in ADWs/rotinas/
+#   time:     HH:MM (24h, in your configured timezone)
+#   interval: Minutes (for recurring routines, use instead of time)
+#   day:      Weekday name or day number (for weekly/monthly)
+#   agent:    Which agent runs this routine
+#   enabled:  true/false
+
+daily:
+  - name: "Review Tasks"
+    script: review_todoist.py
+    time: "06:50"
+    agent: ops
+    enabled: true
+
+  - name: "Morning Briefing"
+    script: good_morning.py
+    time: "07:00"
+    agent: ops
+    enabled: true
+
+  - name: "Email Triage"
+    script: email_triage.py
+    time: "07:15"
+    agent: ops
+    enabled: true
+
+  - name: "Sync Meetings"
+    script: sync_meetings.py
+    interval: 30
+    agent: ops
+    enabled: true
+
+  - name: "Social Analytics"
+    script: social_analytics.py
+    time: "18:00"
+    agent: social
+    enabled: false
+
+  - name: "Licensing Daily"
+    script: licensing_daily.py
+    time: "18:30"
+    agent: projects
+    enabled: false
+
+  - name: "Financial Pulse"
+    script: financial_pulse.py
+    time: "19:00"
+    agent: finance
+    enabled: true
+
+  - name: "Community Pulse"
+    script: community_daily.py
+    time: "20:00"
+    agent: community
+    enabled: true
+
+  - name: "FAQ Sync"
+    script: faq_sync.py
+    time: "20:15"
+    agent: community
+    enabled: true
+
+  - name: "End of Day"
+    script: end_of_day.py
+    time: "21:00"
+    agent: ops
+    enabled: true
+
+  - name: "Memory Sync"
+    script: memory_sync.py
+    time: "21:15"
+    agent: ops
+    enabled: true
+
+  - name: "Dashboard"
+    script: dashboard.py
+    time: "21:30"
+    agent: ops
+    enabled: true
+
+weekly:
+  - name: "Financial Weekly"
+    script: financial_weekly.py
+    day: friday
+    time: "07:30"
+    agent: finance
+    enabled: true
+
+  - name: "Licensing Weekly"
+    script: licensing_weekly.py
+    day: friday
+    time: "07:45"
+    agent: projects
+    enabled: false
+
+  - name: "Weekly Review"
+    script: weekly_review.py
+    day: friday
+    time: "08:00"
+    agent: ops
+    enabled: true
+
+  - name: "Trends"
+    script: trends.py
+    day: friday
+    time: "08:30"
+    agent: ops
+    enabled: true
+
+  - name: "Strategy Digest"
+    script: strategy_digest.py
+    day: friday
+    time: "09:00"
+    agent: strategy
+    enabled: true
+
+  - name: "Linear Review"
+    script: linear_review.py
+    days: [monday, wednesday, friday]
+    time: "09:00"
+    agent: projects
+    enabled: false
+
+  - name: "GitHub Review"
+    script: github_review.py
+    days: [monday, wednesday, friday]
+    time: "09:15"
+    agent: projects
+    enabled: false
+
+  - name: "Community Weekly"
+    script: community_weekly.py
+    day: monday
+    time: "09:30"
+    agent: community
+    enabled: true
+
+  - name: "Health Check-in"
+    script: health_checkin.py
+    day: sunday
+    time: "10:00"
+    agent: personal
+    enabled: false
+
+monthly:
+  - name: "Monthly Close"
+    script: monthly_close.py
+    day: 1
+    time: "08:00"
+    agent: finance
+    enabled: true
+
+  - name: "Community Monthly"
+    script: community_monthly.py
+    day: 1
+    time: "08:15"
+    agent: community
+    enabled: true
+
+  - name: "Licensing Monthly"
+    script: licensing_monthly.py
+    day: 1
+    time: "08:30"
+    agent: projects
+    enabled: false
+
+  - name: "Social Analytics Monthly"
+    script: social_analytics.py
+    day: 1
+    time: "08:45"
+    agent: social
+    enabled: false

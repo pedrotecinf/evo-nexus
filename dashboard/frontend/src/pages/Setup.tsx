@@ -1,0 +1,258 @@
+import { useState, type FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { api } from '../lib/api'
+import { Check } from 'lucide-react'
+
+const AGENTS = [
+  { key: 'ops', label: 'Ops', desc: 'Daily operations (briefing, email, tasks)' },
+  { key: 'finance', label: 'Finance', desc: 'Financial (P&L, cash flow, invoices)' },
+  { key: 'projects', label: 'Projects', desc: 'Project management (sprints, milestones)' },
+  { key: 'community', label: 'Community', desc: 'Community (Discord, WhatsApp pulse)' },
+  { key: 'social', label: 'Social', desc: 'Social media (content, analytics)' },
+  { key: 'strategy', label: 'Strategy', desc: 'Strategy (OKRs, roadmap)' },
+  { key: 'sales', label: 'Sales', desc: 'Commercial (pipeline, proposals)' },
+  { key: 'courses', label: 'Courses', desc: 'Education (course creation)' },
+  { key: 'personal', label: 'Personal', desc: 'Personal (health, habits)' },
+]
+
+const INTEGRATIONS = [
+  { key: 'google_calendar', label: 'Google Calendar + Gmail' },
+  { key: 'todoist', label: 'Todoist' },
+  { key: 'discord', label: 'Discord' },
+  { key: 'telegram', label: 'Telegram' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'stripe', label: 'Stripe' },
+  { key: 'omie', label: 'Omie ERP' },
+  { key: 'github', label: 'GitHub' },
+  { key: 'linear', label: 'Linear' },
+  { key: 'youtube', label: 'YouTube' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'linkedin', label: 'LinkedIn' },
+  { key: 'fathom', label: 'Fathom (meetings)' },
+]
+
+export default function Setup() {
+  const { refreshUser } = useAuth()
+  const [step, setStep] = useState(1)
+
+  // Step 1: Workspace
+  const [ownerName, setOwnerName] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [timezone, setTimezone] = useState('America/Sao_Paulo')
+  const [language, setLanguage] = useState('en')
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(['ops', 'finance', 'projects', 'community'])
+  const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([])
+
+  // Step 2: Admin account
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const toggleAgent = (key: string) => {
+    setSelectedAgents(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
+  }
+
+  const toggleIntegration = (key: string) => {
+    setSelectedIntegrations(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
+  }
+
+  const handleStep1 = (e: FormEvent) => {
+    e.preventDefault()
+    if (!ownerName.trim()) { setError('Your name is required'); return }
+    setError('')
+    setDisplayName(ownerName)
+    setStep(2)
+  }
+
+  const handleStep2 = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!username.trim()) { setError('Username is required'); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return }
+
+    setSubmitting(true)
+    try {
+      // Save workspace config
+      await api.post('/auth/setup', {
+        // Workspace config
+        workspace: {
+          owner_name: ownerName.trim(),
+          company_name: companyName.trim(),
+          timezone,
+          language,
+          agents: selectedAgents,
+          integrations: selectedIntegrations,
+        },
+        // Admin account
+        username: username.trim(),
+        email: email.trim() || undefined,
+        display_name: displayName.trim() || username.trim(),
+        password,
+      })
+      await refreshUser()
+    } catch (ex: unknown) {
+      setError(ex instanceof Error ? ex.message : 'Setup failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const inputClass = "w-full px-4 py-2.5 rounded-lg bg-[#0C111D] border border-[#344054] text-white placeholder-[#667085] focus:outline-none focus:border-[#00FFA7] focus:ring-1 focus:ring-[#00FFA7] transition-colors text-sm"
+
+  return (
+    <div className="min-h-screen bg-[#0C111D] flex items-center justify-center px-4 py-8 font-[Inter]">
+      <div className="w-full max-w-lg">
+        <div className="bg-[#182230] rounded-2xl border border-[#344054] p-8 shadow-2xl">
+          {/* Logo */}
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold tracking-tight">
+              <span className="text-[#00FFA7]">Open</span>
+              <span className="text-white">Claude</span>
+            </h1>
+            <p className="text-[#667085] text-sm mt-2">
+              {step === 1 ? 'Step 1/2 — Configure your workspace' : 'Step 2/2 — Create admin account'}
+            </p>
+            {/* Progress */}
+            <div className="flex gap-2 justify-center mt-3">
+              <div className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#00FFA7]' : 'bg-[#344054]'}`} />
+              <div className={`h-1 w-16 rounded-full ${step >= 2 ? 'bg-[#00FFA7]' : 'bg-[#344054]'}`} />
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Step 1: Workspace */}
+          {step === 1 && (
+            <form onSubmit={handleStep1} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Your Name *</label>
+                <input type="text" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                  className={inputClass} placeholder="John Doe" autoFocus />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Company</label>
+                <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                  className={inputClass} placeholder="Acme Inc" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Timezone</label>
+                  <input type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)}
+                    className={inputClass} placeholder="America/Sao_Paulo" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Language</label>
+                  <select value={language} onChange={(e) => setLanguage(e.target.value)}
+                    className={inputClass}>
+                    <option value="en">English</option>
+                    <option value="pt-BR">Portugues (BR)</option>
+                    <option value="es">Espanol</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Agents */}
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-2">Agents</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {AGENTS.map(a => (
+                    <button key={a.key} type="button" onClick={() => toggleAgent(a.key)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                        selectedAgents.includes(a.key)
+                          ? 'border-[#00FFA7] bg-[#00FFA7]/10 text-[#00FFA7]'
+                          : 'border-[#344054] text-[#667085] hover:border-[#667085]'
+                      }`}>
+                      {selectedAgents.includes(a.key) && <Check size={12} />}
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Integrations */}
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-2">
+                  Integrations <span className="text-[#667085] font-normal">(configure API keys later)</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {INTEGRATIONS.map(i => (
+                    <button key={i.key} type="button" onClick={() => toggleIntegration(i.key)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                        selectedIntegrations.includes(i.key)
+                          ? 'border-[#00FFA7] bg-[#00FFA7]/10 text-[#00FFA7]'
+                          : 'border-[#344054] text-[#667085] hover:border-[#667085]'
+                      }`}>
+                      {selectedIntegrations.includes(i.key) && <Check size={12} />}
+                      {i.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button type="submit"
+                className="w-full py-2.5 rounded-lg bg-[#00FFA7] text-[#0C111D] font-semibold text-sm hover:bg-[#00FFA7]/90 transition-colors mt-2">
+                Next
+              </button>
+            </form>
+          )}
+
+          {/* Step 2: Admin Account */}
+          {step === 2 && (
+            <form onSubmit={handleStep2} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Username *</label>
+                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                  className={inputClass} placeholder="admin" autoFocus />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  className={inputClass} placeholder="admin@example.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Display Name</label>
+                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+                  className={inputClass} placeholder={ownerName || 'Admin'} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Password *</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  className={inputClass} placeholder="Min 6 characters" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#D0D5DD] mb-1.5">Confirm Password *</label>
+                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={inputClass} placeholder="Repeat password" />
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button type="button" onClick={() => setStep(1)}
+                  className="flex-1 py-2.5 rounded-lg text-[#D0D5DD] text-sm hover:bg-white/5 border border-[#344054] transition-colors">
+                  Back
+                </button>
+                <button type="submit" disabled={submitting}
+                  className="flex-1 py-2.5 rounded-lg bg-[#00FFA7] text-[#0C111D] font-semibold text-sm hover:bg-[#00FFA7]/90 transition-colors disabled:opacity-50">
+                  {submitting ? 'Setting up...' : 'Create & Start'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

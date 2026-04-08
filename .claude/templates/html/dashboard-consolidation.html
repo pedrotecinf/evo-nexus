@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Evolution</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+  :root {
+    --evo-green: #00FFA7;
+    --evo-green-dark: #00C681;
+    --evo-purple: #8133AA;
+    --bg-primary: #0C111D;
+    --bg-card: #182230;
+    --bg-card-hover: #1e2a3a;
+    --border: #344054;
+    --text-primary: #F9FAFB;
+    --text-secondary: #D0D5DD;
+    --text-muted: #667085;
+    --red: #F04438;
+    --yellow: #F79009;
+    --green: #12B76A;
+    --blue: #2E90FA;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 0; }
+
+  /* HEADER */
+  .header { background: linear-gradient(135deg, var(--bg-primary) 0%, #0a1628 50%, var(--bg-primary) 100%); border-bottom: 1px solid var(--border); padding: 32px 40px; display: flex; justify-content: space-between; align-items: center; }
+  .header-left h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+  .header-left h1 span { color: var(--evo-green); }
+  .header-left .subtitle { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+
+  /* HEALTH BADGES (header) */
+  .health-badges { display: flex; gap: 12px; flex-wrap: wrap; }
+  .health-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 100px; font-weight: 600; font-size: 13px; }
+  .health-badge.saudavel { background: rgba(18,183,106,0.15); color: var(--green); border: 1px solid rgba(18,183,106,0.3); }
+  .health-badge.misto { background: rgba(247,144,9,0.15); color: var(--yellow); border: 1px solid rgba(247,144,9,0.3); }
+  .health-badge.risco { background: rgba(240,68,56,0.15); color: var(--red); border: 1px solid rgba(240,68,56,0.3); }
+  .health-badge .dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s infinite; }
+  .health-badge.saudavel .dot { background: var(--green); }
+  .health-badge.misto .dot { background: var(--yellow); }
+  .health-badge.risco .dot { background: var(--red); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* CONTAINER */
+  .container { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+
+  /* GRID LAYOUTS */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+
+  /* METRIC CARDS (top row) */
+  .metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+  .metric-card:hover { border-color: var(--evo-green); }
+  .metric-card .label { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-card .value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin: 8px 0 4px; }
+  .metric-card .delta { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .metric-card .delta.up { color: var(--green); }
+  .metric-card .delta.down { color: var(--red); }
+  .metric-card .delta.neutral { color: var(--text-muted); }
+
+  /* SECTIONS */
+  .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+  .section-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .section-header h2 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .section-header .count { background: var(--bg-primary); color: var(--text-muted); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 100px; }
+  .section-body { padding: 0; }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 20px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; background: rgba(0,0,0,0.2); }
+  td { padding: 12px 20px; font-size: 14px; color: var(--text-secondary); border-top: 1px solid rgba(52,64,84,0.5); }
+  tr:hover td { background: var(--bg-card-hover); }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+  .badge.red { background: rgba(240,68,56,0.15); color: var(--red); }
+  .badge.yellow { background: rgba(247,144,9,0.15); color: var(--yellow); }
+  .badge.green { background: rgba(18,183,106,0.15); color: var(--green); }
+  .badge.blue { background: rgba(46,144,250,0.15); color: var(--blue); }
+  .badge.purple { background: rgba(129,51,170,0.15); color: var(--evo-purple); }
+  .badge.muted { background: rgba(102,112,133,0.15); color: var(--text-muted); }
+
+  /* METRIC ROWS (inside sections) */
+  .metric-row { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(52,64,84,0.5); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .mr-label { font-size: 14px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .metric-row .mr-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.green { background: var(--green); }
+  .status-dot.yellow { background: var(--yellow); }
+  .status-dot.red { background: var(--red); }
+
+  /* LIST ITEMS */
+  .list-item { padding: 12px 20px; display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid rgba(52,64,84,0.5); font-size: 14px; color: var(--text-secondary); }
+  .list-item:last-child { border-bottom: none; }
+  .list-item::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--evo-green); margin-top: 5px; flex-shrink: 0; }
+
+  /* HIGHLIGHT CARD */
+  .highlight-card { background: linear-gradient(135deg, rgba(0,255,167,0.05) 0%, rgba(129,51,170,0.05) 100%); border: 1px solid rgba(0,255,167,0.2); border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
+  .highlight-card .title { font-size: 12px; font-weight: 600; color: var(--evo-green); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .highlight-card .body { font-size: 15px; color: var(--text-secondary); line-height: 1.6; }
+
+  /* PROGRESS BAR */
+  .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 4px; }
+  .progress-bar-fill.green { background: var(--green); }
+  .progress-bar-fill.yellow { background: var(--yellow); }
+  .progress-bar-fill.red { background: var(--red); }
+  .progress-bar-fill.evo { background: var(--evo-green); }
+
+  /* ROTINAS STATUS TABLE */
+  .rotina-status { display: flex; align-items: center; gap: 6px; }
+  .rotina-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .rotina-dot.ok { background: var(--green); }
+  .rotina-dot.falha { background: var(--red); }
+  .rotina-dot.pendente { background: var(--text-muted); }
+  .rotina-rate { font-size: 12px; font-weight: 600; }
+  .rotina-rate.high { color: var(--green); }
+  .rotina-rate.medium { color: var(--yellow); }
+  .rotina-rate.low { color: var(--red); }
+
+  /* FOOTER */
+  .footer { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); }
+  .footer span { color: var(--evo-green); }
+
+  /* RESPONSIVE */
+  @media (max-width: 1200px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .three-col { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } .grid-4, .grid-3 { grid-template-columns: 1fr; } .container { padding: 20px; } .header { padding: 20px; flex-direction: column; gap: 16px; } }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1><span>Evolution</span> Dashboard</h1>
+    <div class="subtitle">{{DATA_EXTENSO}} — Consolidação diária</div>
+  </div>
+  <div class="header-right">
+    <div class="health-badges">
+      <div class="health-badge {{PRODUTO_HEALTH}}"><div class="dot"></div>Produto</div>
+      <div class="health-badge {{COMUNIDADE_HEALTH}}"><div class="dot"></div>Comunidade</div>
+      <div class="health-badge {{FINANCEIRO_HEALTH}}"><div class="dot"></div>Financeiro</div>
+      <div class="health-badge {{ROTINAS_HEALTH}}"><div class="dot"></div>Rotinas</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 1: KPI CARDS                               -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="grid-4">
+    <div class="metric-card">
+      <div class="label">Tarefas Pendentes</div>
+      <div class="value">{{TAREFAS_PENDENTES}}</div>
+      <div class="delta {{TAREFAS_DELTA_CLASS}}">{{TAREFAS_DELTA}}</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">PRs Abertos</div>
+      <div class="value">{{PRS_ABERTOS}}</div>
+      <div class="delta {{PRS_DELTA_CLASS}}">{{PRS_DELTA}}</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Msgs Comunidade (24h)</div>
+      <div class="value">{{MSGS_COMUNIDADE}}</div>
+      <div class="delta {{MSGS_DELTA_CLASS}}">{{MSGS_DELTA}}</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">MRR</div>
+      <div class="value">{{MRR_VALOR}}</div>
+      <div class="delta {{MRR_DELTA_CLASS}}">{{MRR_DELTA}}</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 2: AGENDA + TAREFAS PRIORITÁRIAS           -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="two-col">
+    <!-- Agenda do Dia -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Agenda Hoje</h2>
+        <span class="count">{{AGENDA_COUNT}}</span>
+      </div>
+      <div class="section-body">
+        <!-- TEMPLATE: repetir para cada evento -->
+        {{AGENDA_ROWS}}
+        <!-- /TEMPLATE -->
+      </div>
+    </div>
+
+    <!-- Tarefas Prioritárias -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Tarefas Prioritárias</h2>
+        <span class="count">{{TAREFAS_PRIO_COUNT}}</span>
+      </div>
+      <div class="section-body">
+        <!-- TEMPLATE: repetir para cada tarefa -->
+        {{TAREFAS_PRIO_ROWS}}
+        <!-- /TEMPLATE -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 3: SPRINT/LINEAR + GITHUB                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="two-col">
+    <!-- Sprint / Linear -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Sprint / Linear</h2>
+        <span class="badge {{SPRINT_STATUS_CLASS}}">{{SPRINT_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{SPRINT_PROGRESS_DOT}}"></span>Progresso</div>
+          <div class="mr-value">{{SPRINT_PROGRESS}}</div>
+        </div>
+        <div style="padding: 0 20px 14px;">
+          <div class="progress-bar">
+            <div class="progress-bar-fill evo" style="width: {{SPRINT_PROGRESS_PCT}}%"></div>
+          </div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{BLOCKERS_DOT}}"></span>Blockers</div>
+          <div class="mr-value">{{BLOCKERS_N}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{IN_REVIEW_DOT}}"></span>Em Review</div>
+          <div class="mr-value">{{IN_REVIEW_N}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot green"></span>Concluídas</div>
+          <div class="mr-value">{{DONE_N}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GitHub -->
+    <div class="section">
+      <div class="section-header">
+        <h2>GitHub</h2>
+        <span class="badge {{GITHUB_STATUS_CLASS}}">{{GITHUB_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{PRS_DOT}}"></span>PRs Abertos</div>
+          <div class="mr-value">{{GITHUB_PRS_ABERTOS}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{ISSUES_DOT}}"></span>Issues Comunidade</div>
+          <div class="mr-value">{{GITHUB_ISSUES_COMUNIDADE}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot green"></span>Stars (semana)</div>
+          <div class="mr-value">{{GITHUB_STARS_SEMANA}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot green"></span>Último Release</div>
+          <div class="mr-value">{{GITHUB_ULTIMO_RELEASE}}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 4: COMUNIDADE + FINANCEIRO                 -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="two-col">
+    <!-- Comunidade -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Comunidade</h2>
+        <span class="badge {{COMUNIDADE_STATUS_CLASS}}">{{COMUNIDADE_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{WAM_DOT}}"></span>WAM</div>
+          <div class="mr-value">{{WAM_VALOR}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{SENTIMENTO_DOT}}"></span>Sentimento</div>
+          <div class="mr-value">{{SENTIMENTO_LABEL}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{SUPORTE_DOT}}"></span>Tickets Suporte</div>
+          <div class="mr-value">{{SUPORTE_N}}</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{DOCS_DOT}}"></span>Docs Gaps</div>
+          <div class="mr-value">{{DOCS_GAPS_N}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financeiro -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Financeiro</h2>
+        <span class="badge {{FINANCEIRO_STATUS_CLASS}}">{{FINANCEIRO_STATUS}}</span>
+      </div>
+      <div class="section-body">
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{MRR_DOT}}"></span>MRR</div>
+          <div>
+            <div class="mr-value">{{FIN_MRR}}</div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:right;">{{FIN_MRR_VARIACAO}}</div>
+          </div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{ASSINATURAS_DOT}}"></span>Assinaturas</div>
+          <div>
+            <div class="mr-value">{{FIN_ASSINATURAS}}</div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:right;">{{FIN_ASSINATURAS_DELTA}}</div>
+          </div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{RUNWAY_DOT}}"></span>Runway</div>
+          <div class="mr-value">{{FIN_RUNWAY}} meses</div>
+        </div>
+        <div class="metric-row">
+          <div class="mr-label"><span class="status-dot {{PIPELINE_DOT}}"></span>Pipeline</div>
+          <div class="mr-value">{{FIN_PIPELINE}}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 5: REUNIÕES RECENTES                       -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Reuniões Recentes</h2>
+      <span class="count">{{REUNIOES_COUNT}}</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Reunião</th>
+            <th>Participantes</th>
+            <th>Action Items</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- TEMPLATE: repetir para cada reunião -->
+          {{REUNIOES_ROWS}}
+          <!-- /TEMPLATE -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 6: ROTINAS ADW — STATUS & MÉTRICAS         -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Rotinas Automatizadas</h2>
+      <span class="badge {{ROTINAS_STATUS_CLASS}}">{{ROTINAS_STATUS}}</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Rotina</th>
+            <th>Agente</th>
+            <th>Última Execução</th>
+            <th>Duração Média</th>
+            <th>Taxa Sucesso</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- TEMPLATE: repetir para cada rotina — ler ADWs/logs/metrics.json -->
+          {{ROTINAS_ROWS}}
+          <!-- /TEMPLATE -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ROW 7: ALERTAS & ATENÇÃO                       -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="highlight-card">
+    <div class="title">Pontos de Atenção</div>
+    <div class="body">{{PONTOS_ATENCAO}}</div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  Gerado automaticamente por <span>Evolution Foundation</span> — Agente Clawdia — {{TIMESTAMP}}
+</div>
+
+</body>
+</html>

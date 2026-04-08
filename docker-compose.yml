@@ -1,0 +1,87 @@
+services:
+  # Scheduler — roda todas as rotinas automatizadas
+  scheduler:
+    build: .
+    container_name: openclaude-scheduler
+    command: ["scheduler.py"]
+    env_file: .env
+    environment:
+      - TZ=America/Sao_Paulo
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - daily-logs:/workspace/01 Daily Logs
+      - projects:/workspace/02 Projects
+      - comunidade:/workspace/03 Comunidade
+      - financeiro:/workspace/05 Financeiro
+      - pessoal:/workspace/06 Pessoal
+      - reunioes:/workspace/07 Reuniões
+      - estrategia:/workspace/09 Estrategia
+      - memory:/workspace/memory
+      - adw-logs:/workspace/ADWs/logs
+      - agent-memory:/workspace/.claude/agent-memory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "scheduler.py"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # Telegram — bot que escuta mensagens
+  telegram:
+    build: .
+    container_name: openclaude-telegram
+    entrypoint: ["claude"]
+    command: ["--channels", "plugin:telegram@claude-plugins-official", "--dangerously-skip-permissions"]
+    env_file: .env
+    environment:
+      - TZ=America/Sao_Paulo
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - daily-logs:/workspace/01 Daily Logs
+      - projects:/workspace/02 Projects
+      - comunidade:/workspace/03 Comunidade
+      - financeiro:/workspace/05 Financeiro
+      - pessoal:/workspace/06 Pessoal
+      - reunioes:/workspace/07 Reuniões
+      - estrategia:/workspace/09 Estrategia
+      - memory:/workspace/memory
+      - adw-logs:/workspace/ADWs/logs
+      - agent-memory:/workspace/.claude/agent-memory
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  # Runner on-demand — para executar rotinas manualmente
+  # Uso: docker compose run --rm runner ADWs/rotinas/good_morning.py
+  runner:
+    build: .
+    container_name: openclaude-runner
+    env_file: .env
+    environment:
+      - TZ=America/Sao_Paulo
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - daily-logs:/workspace/01 Daily Logs
+      - projects:/workspace/02 Projects
+      - comunidade:/workspace/03 Comunidade
+      - financeiro:/workspace/05 Financeiro
+      - pessoal:/workspace/06 Pessoal
+      - reunioes:/workspace/07 Reuniões
+      - estrategia:/workspace/09 Estrategia
+      - memory:/workspace/memory
+      - adw-logs:/workspace/ADWs/logs
+      - agent-memory:/workspace/.claude/agent-memory
+    profiles:
+      - manual
+
+volumes:
+  daily-logs:
+  projects:
+  comunidade:
+  financeiro:
+  pessoal:
+  reunioes:
+  estrategia:
+  memory:
+  adw-logs:
+  agent-memory:
