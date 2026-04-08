@@ -187,19 +187,42 @@ def service_logs(service_id):
         return jsonify({"lines": ["Telegram bot is not running. Click Start to launch it."]})
 
     elif service_id == "scheduler":
-        # Read last ADW log
+        # Read execution logs from JSONL files (real scheduler activity)
+        import json as _json
+        from datetime import date, timedelta
         from routes._helpers import safe_read
         logs_dir = WORKSPACE / "ADWs" / "logs"
+
+        lines = []
         if logs_dir.is_dir():
-            detail_dir = logs_dir / "detail"
-            if detail_dir.is_dir():
-                files = sorted(detail_dir.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True)
-                if files:
-                    content = safe_read(files[0])
+            # Read last 3 days of JSONL logs
+            today = date.today()
+            for offset in range(3):
+                d = today - timedelta(days=offset)
+                jsonl_file = logs_dir / f"{d.isoformat()}.jsonl"
+                if jsonl_file.is_file():
+                    content = safe_read(jsonl_file)
                     if content:
-                        lines = content.split('\n')[-100:]
-                        return jsonify({"lines": lines, "file": files[0].name})
-        return jsonify({"lines": ["No scheduler logs yet."]})
+                        for raw_line in content.strip().splitlines():
+                            try:
+                                entry = _json.loads(raw_line)
+                                ts = entry.get("timestamp", "")[:19].replace("T", " ")
+                                name = entry.get("run", "?")
+                                rc = entry.get("returncode", -1)
+                                dur = entry.get("duration_seconds", 0)
+                                cost = entry.get("cost_usd", 0)
+                                status = "✓" if rc == 0 else "✗"
+                                lines.append(f"{ts}  {status}  {name:<25} {dur:>6.1f}s  ${cost:.4f}")
+                            except (_json.JSONDecodeError, KeyError):
+                                continue
+
+        if lines:
+            # Header
+            header = f"{'Timestamp':<20}  {'':>1}  {'Routine':<25} {'Duration':>8}  {'Cost':>8}"
+            separator = "-" * len(header)
+            return jsonify({"lines": [header, separator] + lines[-100:]})
+
+        return jsonify({"lines": ["No scheduler execution logs yet.", "", "Logs appear here after routines run."]})
 
     # Docker container logs
     if service_id.startswith("docker-"):
