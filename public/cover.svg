@@ -58,7 +58,10 @@
   <rect x="0" y="395" width="1200" height="5" fill="#00FFA7" fill-opacity="0.6"/>
 
   <!-- By Evolution Foundation -->
-  <text x="600" y="340" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#344054" font-weight="400">
-    by Evolution Foundation  •  Built with Claude Code
+  <text x="600" y="345" text-anchor="middle" font-family="Inter, sans-serif" font-size="15" font-weight="500">
+    <tspan fill="#667085">by </tspan>
+    <tspan fill="#00FFA7" font-weight="700">Evolution Foundation</tspan>
+    <tspan fill="#667085">  ·  Built with </tspan>
+    <tspan fill="#D0D5DD" font-weight="600">Claude Code</tspan>
   </text>
 </svg>
