@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-04-08
+
+### Added
+- **Docs page on site** (`/docs`) — full documentation viewer with sidebar, search, and markdown rendering
+- **Auto-version system** — `pyproject.toml` is single source of truth, injected into site (Vite `__APP_VERSION__`), dashboard (`/api/version`), and CI (Docker build-arg)
+- **Pre-build docs index** — `scripts/build-docs-index.mjs` generates `docs-index.json` at build time
+- **`/api/version` endpoint** — dashboard serves current version from `pyproject.toml`
+
+### Changed
+- **`make docs-build`** — now also syncs `docs/` to `site/public/docs/`
+- **Docs links** in landing page point to `/docs` (internal route, not dashboard)
+- **Site version badge** — reads from `pyproject.toml` dynamically instead of hardcoded
+
 ## [0.3.1] - 2026-04-08
 
 ### Added
