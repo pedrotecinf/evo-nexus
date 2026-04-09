@@ -78,3 +78,6 @@ config/routines.yaml
 .claude/image-cache/
 .claude/todos/
 .claude/TASKS.md
+
+# ── Others ───────────────────────
+site/
