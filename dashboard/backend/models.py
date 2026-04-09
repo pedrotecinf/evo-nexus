@@ -87,6 +87,7 @@ ALL_RESOURCES = {
     "templates": ["view"],
     "routines": ["view", "execute"],
     "scheduler": ["view", "execute"],
+    "tasks": ["view", "execute", "manage"],
     "mempalace": ["view", "manage"],
 }
 
@@ -113,6 +114,7 @@ BUILTIN_ROLES = {
             "templates": ["view"],
             "routines": ["view", "execute"],
             "scheduler": ["view", "execute"],
+            "tasks": ["view", "execute"],
             "mempalace": ["view"],
         },
     },
@@ -132,10 +134,48 @@ BUILTIN_ROLES = {
             "integrations": ["view"],
             "routines": ["view"],
             "scheduler": ["view"],
+            "tasks": ["view"],
             "mempalace": ["view"],
         },
     },
 }
+
+
+class ScheduledTask(db.Model):
+    __tablename__ = "scheduled_tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    type = db.Column(db.String(20), nullable=False)  # skill, prompt, script
+    payload = db.Column(db.Text, nullable=False)
+    agent = db.Column(db.String(50), nullable=True)
+    scheduled_at = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending, running, completed, failed, cancelled
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    result_summary = db.Column(db.Text, nullable=True)
+    error = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "type": self.type,
+            "payload": self.payload,
+            "agent": self.agent,
+            "scheduled_at": self.scheduled_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.scheduled_at else None,
+            "status": self.status,
+            "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.created_at else None,
+            "started_at": self.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.started_at else None,
+            "completed_at": self.completed_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.completed_at else None,
+            "result_summary": self.result_summary,
+            "error": self.error,
+            "created_by": self.created_by,
+        }
 
 
 class RuntimeConfig(db.Model):

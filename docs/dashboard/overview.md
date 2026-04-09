@@ -72,6 +72,10 @@ Metrics for each automated routine: total runs, success rate, average duration, 
 
 ![Routines](../imgs/doc-routines.png)
 
+### Tasks
+
+Create and manage one-off scheduled actions. Schedule a skill, prompt, or script to run at a specific date/time. Filter by status (pending, running, completed, failed), create new tasks, run immediately, or view results. See [Scheduled Tasks](../routines/scheduled-tasks.md) for details.
+
 ### Skills
 
 Browse all installed skills grouped by prefix (`social-`, `fin-`, `int-`, `prod-`, etc). Click a skill to see its full description, trigger conditions, and source file.

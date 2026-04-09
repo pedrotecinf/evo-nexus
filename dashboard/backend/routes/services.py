@@ -60,27 +60,17 @@ WORKSPACE_STR = str(WORKSPACE)
 
 # ── Manual routine execution ─────────────────────────
 
-ROUTINE_SCRIPTS = {
-    "morning": "good_morning.py", "sync": "custom/sync_meetings.py", "triage": "custom/email_triage.py",
-    "review": "custom/review_todoist.py", "memory": "memory_sync.py", "eod": "end_of_day.py",
-    "dashboard": "custom/dashboard.py", "fin-pulse": "custom/financial_pulse.py", "youtube": "custom/youtube_report.py",
-    "instagram": "custom/instagram_report.py", "linkedin": "custom/linkedin_report.py", "social": "custom/social_analytics.py",
-    "licensing": "custom/licensing_daily.py", "weekly": "weekly_review.py", "health": "custom/health_checkin.py",
-    "trends": "custom/trends.py", "linear": "custom/linear_review.py", "community": "custom/community_daily.py",
-    "community-week": "custom/community_weekly.py", "community-month": "custom/community_monthly.py",
-    "github": "custom/github_review.py", "faq": "custom/faq_sync.py", "strategy": "custom/strategy_digest.py",
-    "fin-weekly": "custom/financial_weekly.py", "licensing-weekly": "custom/licensing_weekly.py",
-    "fin-close": "custom/monthly_close.py", "licensing-month": "custom/licensing_monthly.py",
-}
-
 
 @bp.route("/api/routines/<routine_id>/run", methods=["POST"])
 def run_routine(routine_id):
     """Manually trigger a routine execution."""
-    script = ROUTINE_SCRIPTS.get(routine_id)
+    from routes._helpers import get_routine_scripts
+    routine_scripts = get_routine_scripts()
+
+    script = routine_scripts.get(routine_id)
     if not script:
         # Try matching by script name
-        for name, s in ROUTINE_SCRIPTS.items():
+        for name, s in routine_scripts.items():
             if routine_id.replace("-", "_") in s or s.replace(".py", "") == routine_id.replace("-", "_"):
                 script = s
                 break

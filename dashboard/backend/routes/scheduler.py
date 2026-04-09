@@ -2,26 +2,9 @@
 
 import re
 from flask import Blueprint, jsonify
-from routes._helpers import WORKSPACE, safe_read
+from routes._helpers import WORKSPACE, safe_read, get_script_agents
 
 bp = Blueprint("scheduler", __name__)
-
-
-# Agent mapping from script name (module level so _load_yaml_routines can access)
-SCRIPT_AGENTS = {
-        "review_todoist": "clawdia", "good_morning": "clawdia", "email_triage": "clawdia",
-        "sync_meetings": "clawdia", "end_of_day": "clawdia", "memory_sync": "clawdia",
-        "weekly_review": "clawdia", "trends": "clawdia", "dashboard": "clawdia",
-        "community_daily": "pulse", "community_weekly": "pulse", "community_monthly": "pulse",
-        "faq_sync": "pulse", "financial_pulse": "flux", "financial_weekly": "flux",
-        "monthly_close": "flux", "licensing_daily": "atlas", "licensing_weekly": "atlas",
-        "licensing_monthly": "atlas", "github_review": "atlas", "linear_review": "atlas",
-        "memory_lint": "clawdia",
-        "log_cleanup": "system",
-        "health_checkin": "kai", "strategy_digest": "sage",
-        "social_analytics": "pixel", "youtube_report": "pixel", "instagram_report": "pixel",
-        "linkedin_report": "pixel",
-}
 
 
 @bp.route("/api/scheduler")
@@ -76,7 +59,7 @@ def get_schedule():
 
         # Get agent from script name (strip custom/ prefix and .py)
         script_key = script.replace("custom/", "").replace(".py", "") if script else ""
-        agent = SCRIPT_AGENTS.get(script_key, "")
+        agent = get_script_agents().get(script_key, "")
 
         entries.append({
             "name": task_name,
@@ -112,7 +95,7 @@ def _load_yaml_routines(entries: list):
                 continue
             script = r.get("script", "")
             script_key = script.replace(".py", "")
-            agent = SCRIPT_AGENTS.get(script_key, "")
+            agent = get_script_agents().get(script_key, "")
             if r.get("interval"):
                 sched = f"every {r['interval']} min"
             else:
@@ -132,7 +115,7 @@ def _load_yaml_routines(entries: list):
                 continue
             script = r.get("script", "")
             script_key = script.replace(".py", "")
-            agent = SCRIPT_AGENTS.get(script_key, "")
+            agent = get_script_agents().get(script_key, "")
             days = r.get("days", [r.get("day", "friday")])
             time_str = r.get("time", "09:00")
             for d in days:
@@ -151,7 +134,7 @@ def _load_yaml_routines(entries: list):
                 continue
             script = r.get("script", "")
             script_key = script.replace(".py", "")
-            agent = SCRIPT_AGENTS.get(script_key, "")
+            agent = get_script_agents().get(script_key, "")
             entries.append({
                 "name": r.get("name", script),
                 "script": f"custom/{script}",

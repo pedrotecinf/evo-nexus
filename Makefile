@@ -3,20 +3,14 @@
 # ============================================================
 # Usage: make <command>
 # Docs: ROUTINES.md
+#
+# Core routines have dedicated targets below.
+# Custom routines (ADWs/routines/custom/) are user-specific —
+# run them with: make run R=<id>  (e.g. make run R=fin-pulse)
+# List all available: make list-routines
 
 # Auto-detect: uv if available, fallback to python3
 PYTHON := $(shell command -v uv >/dev/null 2>&1 && echo "uv run python" || echo "python3")
-
-# ── Setup ──────────────────────────────────
-docs-build:         ## 📄 Regenerate docs/llms-full.txt and sync to site
-	@$(PYTHON) -c "from pathlib import Path; docs=Path('docs'); parts=['# OpenClaude Documentation\n\nComplete reference.\n']; [parts.append(f.read_text()) for f in sorted(docs.rglob('*.md'))]; Path('docs/llms-full.txt').write_text('\n\n---\n\n'.join(parts)); print(f'Generated docs/llms-full.txt ({len(parts)-1} docs)')"
-	@rm -rf site/public/docs && cp -r docs/ site/public/docs/ && echo "Synced docs → site/public/docs/"
-
-setup:              ## 🔧 Interactive setup wizard (prerequisites, config, folders)
-	$(PYTHON) setup.py
-
-# ── Routines ───────────────────────────────
-# ============================================================
 ADW_DIR := ADWs/routines
 
 # Load .env if it exists
@@ -25,19 +19,22 @@ include .env
 export
 endif
 
-# --- Daily routines ---
+# ── Setup ──────────────────────────────────
+
+docs-build:         ## 📄 Regenerate docs/llms-full.txt and sync to site
+	@$(PYTHON) -c "from pathlib import Path; docs=Path('docs'); parts=['# OpenClaude Documentation\n\nComplete reference.\n']; [parts.append(f.read_text()) for f in sorted(docs.rglob('*.md'))]; Path('docs/llms-full.txt').write_text('\n\n---\n\n'.join(parts)); print(f'Generated docs/llms-full.txt ({len(parts)-1} docs)')"
+	@rm -rf site/public/docs && cp -r docs/ site/public/docs/ && echo "Synced docs → site/public/docs/"
+
+setup:              ## 🔧 Interactive setup wizard (prerequisites, config, folders)
+	$(PYTHON) setup.py
+
+# ── Core Routines (shipped with repo) ─────
 
 morning:            ## ☀️  Morning briefing — agenda, emails, tasks (@clawdia)
 	$(PYTHON) $(ADW_DIR)/good_morning.py
 
-sync:               ## 🎙️  Sync Fathom meetings → Todoist (@clawdia)
-	$(PYTHON) $(ADW_DIR)/custom/sync_meetings.py
-
-triage:             ## 📧 Email triage (@clawdia)
-	$(PYTHON) $(ADW_DIR)/custom/email_triage.py
-
-review:             ## 📋 Organize tasks in Todoist (@clawdia)
-	$(PYTHON) $(ADW_DIR)/custom/review_todoist.py
+eod:                ## 🌙 End of day consolidation — memory, logs, learnings (@clawdia)
+	$(PYTHON) $(ADW_DIR)/end_of_day.py
 
 memory:             ## 🧠 Consolidate memory (@clawdia)
 	$(PYTHON) $(ADW_DIR)/memory_sync.py
@@ -45,83 +42,49 @@ memory:             ## 🧠 Consolidate memory (@clawdia)
 memory-lint:        ## 🔍 Memory health check — contradictions, gaps, stale data (@clawdia)
 	$(PYTHON) $(ADW_DIR)/memory_lint.py
 
-eod:                ## 🌙 End of day consolidation — memory, logs, learnings (@clawdia)
-	$(PYTHON) $(ADW_DIR)/end_of_day.py
-
-dashboard:          ## 📊 Consolidated dashboard — 360 business view (@clawdia)
-	$(PYTHON) $(ADW_DIR)/custom/dashboard.py
-
-fin-pulse:          ## 💰 Financial Pulse — daily financial snapshot (@flux)
-	$(PYTHON) $(ADW_DIR)/custom/financial_pulse.py
-
-youtube:            ## 📺 YouTube Report — channel analytics (@pixel)
-	$(PYTHON) $(ADW_DIR)/custom/youtube_report.py
-
-instagram:          ## 📸 Instagram Report — profile analytics (@pixel)
-	$(PYTHON) $(ADW_DIR)/custom/instagram_report.py
-
-linkedin:           ## 💼 LinkedIn Report — profile analytics (@pixel)
-	$(PYTHON) $(ADW_DIR)/custom/linkedin_report.py
-
-social:             ## 📊 Social Analytics — consolidated cross-platform report (@pixel)
-	$(PYTHON) $(ADW_DIR)/custom/social_analytics.py
-
-licensing:          ## 📊 Licensing Daily — daily open source growth (@atlas)
-	$(PYTHON) $(ADW_DIR)/custom/licensing_daily.py
-
-# --- Weekly financial routines ---
-
-fin-weekly:         ## 📊 Financial Weekly — weekly financial report (@flux)
-	$(PYTHON) $(ADW_DIR)/custom/financial_weekly.py
-
-licensing-weekly:   ## 📊 Licensing Weekly — weekly open source growth (@atlas)
-	$(PYTHON) $(ADW_DIR)/custom/licensing_weekly.py
-
-# --- Monthly routines ---
-
-fin-close:          ## 📋 Monthly Close — monthly close kickoff (@flux)
-	$(PYTHON) $(ADW_DIR)/custom/monthly_close.py
-
-community-month:    ## 📊 Community Monthly — monthly community report (@pulse)
-	$(PYTHON) $(ADW_DIR)/custom/community_monthly.py
-
-licensing-month:    ## 📊 Licensing Monthly — monthly open source growth (@atlas)
-	$(PYTHON) $(ADW_DIR)/custom/licensing_monthly.py
-
-# --- Weekly routines ---
-
 weekly:             ## 📊 Full weekly review (@clawdia)
 	$(PYTHON) $(ADW_DIR)/weekly_review.py
 
-health:             ## 🏥 Weekly health check-in (@kai)
-	$(PYTHON) $(ADW_DIR)/custom/health_checkin.py
+# ── Dynamic Routine Runner ────────────────
+# Run any routine (core or custom) by its ID.
+# IDs are derived from script names. Use `make list-routines` to see all.
+# Examples:
+#   make run R=morning
+#   make run R=fin-pulse
+#   make run R=community-week
 
-trends:             ## 📈 Weekly trend analysis — community, GitHub, financial (@clawdia)
-	$(PYTHON) $(ADW_DIR)/custom/trends.py
+run:                ## ▶️  Run any routine: make run R=<id>  (e.g. make run R=fin-pulse)
+	@$(PYTHON) -c "\
+	import sys; sys.path.insert(0, 'dashboard/backend'); \
+	from routes._helpers import get_routine_scripts; \
+	scripts = get_routine_scripts(); \
+	r = '$(R)'; \
+	s = scripts.get(r) or next((v for k,v in scripts.items() if r.replace('-','_') in v), None); \
+	print(f'Running: {s}') if s else (print(f'Unknown routine: {r}. Available: {\" \".join(sorted(scripts.keys()))}'), exit(1)); \
+	" && $(PYTHON) $(ADW_DIR)/$$($(PYTHON) -c "\
+	import sys; sys.path.insert(0, 'dashboard/backend'); \
+	from routes._helpers import get_routine_scripts; \
+	scripts = get_routine_scripts(); \
+	r = '$(R)'; \
+	s = scripts.get(r) or next((v for k,v in scripts.items() if r.replace('-','_') in v), ''); \
+	print(s); \
+	")
 
-linear:             ## 🗂️  Linear review — issues in review, blockers, stale (@atlas)
-	$(PYTHON) $(ADW_DIR)/custom/linear_review.py
+list-routines:      ## 📋 List all available routines (dynamic from scripts)
+	@$(PYTHON) -c "\
+	import sys; sys.path.insert(0, 'dashboard/backend'); \
+	from routes._helpers import discover_routines; \
+	routines = discover_routines(); \
+	[print(f'  \033[36m{k:20s}\033[0m {v[\"name\"]:30s} @{v[\"agent\"]:<10s} {v[\"script\"]}') for k,v in sorted(routines.items())]; \
+	print(f'\n  {len(routines)} routines available — run with: make run R=<id>'); \
+	"
 
-community:          ## 📣 Daily Discord community pulse (@pulse)
-	$(PYTHON) $(ADW_DIR)/custom/community_daily.py
+# ── Combos ────────────────────────────────
 
-community-week:     ## 📊 Weekly Discord community report (@pulse)
-	$(PYTHON) $(ADW_DIR)/custom/community_weekly.py
+daily:              ## ☀️  Combo: sync meetings + review todoist
+	@$(PYTHON) $(ADW_DIR)/custom/sync_meetings.py 2>/dev/null; $(PYTHON) $(ADW_DIR)/custom/review_todoist.py 2>/dev/null; echo "Daily combo done"
 
-strategy:           ## 🎯 Weekly Strategy Digest — consolidated business view (@sage)
-	$(PYTHON) $(ADW_DIR)/custom/strategy_digest.py
-
-github:             ## 🐙 GitHub repos review — PRs, issues, stars (@atlas)
-	$(PYTHON) $(ADW_DIR)/custom/github_review.py
-
-faq:                ## FAQ Sync — update community FAQ (Discord + GitHub) (@pulse)
-	$(PYTHON) $(ADW_DIR)/custom/faq_sync.py
-
-# --- Combos ---
-
-daily: sync review  ## Combo: sync meetings + review todoist
-
-# --- Servers ---
+# ── Servers ───────────────────────────────
 
 scheduler:          ## ⏰ Start routine scheduler (runs in background)
 	$(PYTHON) scheduler.py
@@ -145,7 +108,7 @@ telegram-stop:      ## 🛑 Stop the Telegram bot
 telegram-attach:    ## 📺 Connect to Telegram terminal (Ctrl+A D to detach)
 	@screen -r telegram
 
-# --- Utilities ---
+# ── Utilities ─────────────────────────────
 
 logs:               ## 📝 Show latest logs (JSONL)
 	@tail -20 ADWs/logs/$$(ls -t ADWs/logs/*.jsonl 2>/dev/null | head -1) 2>/dev/null || echo "No logs yet."
@@ -172,7 +135,7 @@ metrics:            ## 📈 Show accumulated metrics per routine (tokens + cost)
 clean-logs:         ## 🗑️  Remove logs older than 30 days
 	@find ADWs/logs/ -name "*.log" -mtime +30 -delete 2>/dev/null; find ADWs/logs/ -name "*.jsonl" -mtime +30 -delete 2>/dev/null; echo "Old logs removed."
 
-# --- Docker (VPS) ---
+# ── Docker (VPS) ──────────────────────────
 
 docker-dashboard:   ## 🐳 Start dashboard in Docker (port 8080)
 	docker compose up -d dashboard
@@ -195,5 +158,5 @@ docker-build:       ## 🐳 Build the image
 help:               ## 📖 Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: morning sync triage review memory memory-lint eod dashboard youtube instagram linkedin social fin-pulse licensing weekly health trends linear community community-week community-month github faq strategy fin-weekly licensing-weekly fin-close licensing-month daily scheduler social-auth telegram telegram-stop telegram-attach logs logs-detail logs-tail metrics clean-logs docker-dashboard docker-telegram docker-down docker-logs docker-run docker-build help
+.PHONY: morning eod memory memory-lint weekly run list-routines daily scheduler dashboard-app telegram telegram-stop telegram-attach logs logs-detail logs-tail metrics clean-logs docker-dashboard docker-telegram docker-down docker-logs docker-run docker-build help docs-build setup
 .DEFAULT_GOAL := help

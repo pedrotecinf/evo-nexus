@@ -69,7 +69,7 @@
 ### Routines & Scheduling
 
 - [ ] 🔥 **Trigger registry** — define and manage named triggers (webhook, cron, event-based) that invoke skills or routines
-- [ ] **Non-recurrent scheduled actions** — one-off scheduled tasks (e.g., "post this on LinkedIn Friday at 10am") without creating a full routine
+- [x] **Non-recurrent scheduled actions** — one-off scheduled tasks (e.g., "post this on LinkedIn Friday at 10am") without creating a full routine
 - [x] **Systematic routines** — pure Python routines via `run_script()` — no AI, no tokens, no cost. `create-routine` skill generates the code
 
 ### Integrations

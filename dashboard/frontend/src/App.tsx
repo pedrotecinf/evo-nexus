@@ -13,6 +13,7 @@ import Integrations from './pages/Integrations'
 import Config from './pages/Config'
 import Templates from './pages/Templates'
 import Scheduler from './pages/Scheduler'
+import Tasks from './pages/Tasks'
 import Memory from './pages/Memory'
 import Files from './pages/Files'
 import Chat from './pages/Chat'
@@ -81,6 +82,7 @@ function AppContent() {
           <Route path="/agents" element={<Agents />} />
           <Route path="/agents/:name" element={<AgentDetail />} />
           <Route path="/routines" element={<Routines />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="/skills/:name" element={<SkillDetail />} />
           <Route path="/costs" element={<Costs />} />

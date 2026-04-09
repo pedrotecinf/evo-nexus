@@ -116,13 +116,13 @@ Key rules for systematic routines:
 - No `agent` parameter — systematic routines don't use agents
 - Common patterns: `requests.get()` for API polling, `os.walk()` for file ops, `csv.writer()` for data export, `shutil` for backups
 
-## Step 3: Add to Makefile
+## Step 3: Run It
 
-Append a make target:
+No Makefile changes needed — routines are discovered dynamically from scripts.
 
-```makefile
-{routine-id}:    ## {emoji} {Description} (@{agent})
-	$(PYTHON) $(ADW_DIR)/custom/{script_name}.py
+```bash
+make run R={routine-id}      # Run by ID
+make list-routines           # List all available
 ```
 
 ## Step 4: Add to Scheduler (Optional)
@@ -147,7 +147,7 @@ schedule.every({N}).minutes.do(run_adw, "{Routine Name}", "custom/{script_name}.
 
 Run the routine manually:
 ```bash
-make {routine-id}
+make run R={routine-id}
 ```
 
 Check the output and adjust the prompt if needed.

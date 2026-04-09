@@ -9,7 +9,6 @@ make setup           # Interactive setup wizard (runs setup.py)
                      # Checks prerequisites (Claude Code, uv, Node.js)
                      # Installs Python deps via `uv sync`
                      # Creates config files, .env, CLAUDE.md, workspace folders
-                     # Builds the dashboard frontend via npm
 ```
 
 ## Dashboard
@@ -31,43 +30,21 @@ make memory-lint     # Memory health check -- contradictions, gaps, stale data (
 make weekly          # Full weekly review (@clawdia)
 ```
 
-## Custom Routines -- Daily
+## Dynamic Routine Runner
+
+Custom routines (user-specific, in `ADWs/routines/custom/`) are run via the dynamic runner. No hardcoded Makefile targets needed -- routines are discovered automatically from script files.
 
 ```bash
-make sync            # Sync Fathom meetings (@clawdia)
-make triage          # Email triage (@clawdia)
-make review          # Organize Todoist tasks (@clawdia)
-make dashboard       # Consolidated 360 dashboard (@clawdia)
-make community       # Daily Discord community pulse (@pulse)
-make faq             # FAQ sync -- Discord + GitHub (@pulse)
-make fin-pulse       # Financial pulse -- Stripe + Omie snapshot (@flux)
-make licensing       # Licensing daily -- open source telemetry (@atlas)
-make social          # Social analytics -- cross-platform report (@pixel)
-make youtube         # YouTube channel analytics (@pixel)
-make instagram       # Instagram profile analytics (@pixel)
-make linkedin        # LinkedIn profile analytics (@pixel)
+make run R=fin-pulse        # Financial pulse (@flux)
+make run R=community        # Daily community pulse (@pulse)
+make run R=licensing-month  # Monthly licensing report (@atlas)
+make run R=social           # Social analytics (@pixel)
+make run R=strategy         # Strategy digest (@sage)
+
+make list-routines          # List all available routines (core + custom)
 ```
 
-## Custom Routines -- Weekly
-
-```bash
-make fin-weekly      # Financial weekly report (@flux)
-make licensing-weekly # Licensing weekly -- open source growth (@atlas)
-make trends          # Trend analysis -- community, GitHub, financial (@clawdia)
-make linear          # Linear review -- issues, blockers, stale (@atlas)
-make github          # GitHub review -- PRs, issues, stars (@atlas)
-make community-week  # Weekly Discord community report (@pulse)
-make strategy        # Strategy digest -- consolidated business view (@sage)
-make health          # Weekly health check-in (@kai)
-```
-
-## Custom Routines -- Monthly
-
-```bash
-make fin-close       # Monthly close kickoff (@flux)
-make community-month # Monthly community report (@pulse)
-make licensing-month # Monthly licensing report (@atlas)
-```
+Any script in `ADWs/routines/` or `ADWs/routines/custom/` is automatically discoverable. The routine ID is derived from the script name (e.g., `financial_pulse.py` becomes `fin-pulse`).
 
 ## Combos
 
@@ -97,11 +74,12 @@ make clean-logs      # Remove logs older than 30 days
 ## Docker (VPS Deployment)
 
 ```bash
-make docker-up       # Start scheduler + telegram in Docker
-make docker-down     # Stop all containers
-make docker-logs     # Show container logs (follow mode)
+make docker-dashboard  # Start dashboard in Docker (port 8080)
+make docker-telegram   # Start Telegram bot in Docker
+make docker-down       # Stop all containers
+make docker-logs       # Show container logs (follow mode)
 make docker-run ADW=good_morning.py  # Run a specific routine in Docker
-make docker-build    # Build the Docker image
+make docker-build      # Build the Docker image
 ```
 
 ## Help

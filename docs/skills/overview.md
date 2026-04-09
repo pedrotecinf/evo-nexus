@@ -23,7 +23,7 @@ A skill is a directory in `.claude/skills/` containing a `SKILL.md` file with:
 
 Skills are organized by prefix:
 
-The repo ships **~80 skills** (non-evo). If you install [Evo Method](https://github.com/EvolutionAPI/EVO-METHOD) separately, you get ~45 additional `evo-` skills — these are gitignored from this repo but work normally when present locally.
+The repo ships **~81 skills** (non-evo). If you install [Evo Method](https://github.com/EvolutionAPI/EVO-METHOD) separately, you get ~45 additional `evo-` skills — these are gitignored from this repo but work normally when present locally.
 
 | Prefix | Category | Count | Examples |
 |--------|----------|-------|----------|

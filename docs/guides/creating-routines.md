@@ -52,16 +52,7 @@ if __name__ == "__main__":
     run()
 ```
 
-### 2. Makefile Target
-
-Added to the project Makefile:
-
-```makefile
-competitor-check: ## Daily competitor check (sage)
-	@python3 ADWs/routines/custom/competitor-check.py
-```
-
-### 3. YAML Entry
+### 2. YAML Entry
 
 Added to `config/routines.yaml`:
 
@@ -96,10 +87,10 @@ Here's the full walkthrough:
 
 **You:** "HTML report in the strategy folder, plus a Telegram summary"
 
-Claude then generates the script, Makefile target, and YAML entry. You can test it immediately:
+Claude then generates the script and YAML entry. Routines are discovered dynamically — no Makefile changes needed. Test it immediately:
 
 ```bash
-make competitor-check
+make run R=competitor-check
 ```
 
 ## Where Files Live
@@ -107,9 +98,8 @@ make competitor-check
 | File | Location |
 |---|---|
 | Custom routine scripts | `ADWs/routines/custom/` |
-| Built-in routine scripts | `ADWs/routines/` |
+| Core routine scripts | `ADWs/routines/` |
 | Routine config | `config/routines.yaml` |
-| Makefile targets | `Makefile` |
 | Generated reports | Varies by agent (e.g., `09 Estrategia/`, `05 Financeiro/`) |
 
 ## Testing
@@ -117,19 +107,23 @@ make competitor-check
 After creation, test your routine:
 
 ```bash
-# Run directly
-make <target-name>
+# Run by ID (dynamic discovery)
+make run R=competitor-check
+
+# List all available routines
+make list-routines
 
 # Check logs
 make logs
-
-# See all available routines
-make help
 ```
 
 ## Managing Routines
 
-- **Edit schedule**: Update the cron expression in `config/routines.yaml`
-- **Disable**: Comment out or remove the YAML entry
+- **Edit schedule**: Update the entry in `config/routines.yaml`
+- **Disable**: Set `enabled: false` or remove the YAML entry
 - **View metrics**: `make metrics` shows token usage and cost per routine
 - **Scheduler**: `make scheduler` runs all routines on their configured schedules
+
+## One-Off Actions
+
+If you need to run something **once** at a specific time (not recurring), use [Scheduled Tasks](../routines/scheduled-tasks.md) instead. Say "schedule this for Friday at 10am" or use the `schedule-task` skill.

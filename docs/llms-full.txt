@@ -691,6 +691,10 @@ Metrics for each automated routine: total runs, success rate, average duration, 
 
 ![Routines](../imgs/doc-routines.png)
 
+### Tasks
+
+Create and manage one-off scheduled actions. Schedule a skill, prompt, or script to run at a specific date/time. Filter by status (pending, running, completed, failed), create new tasks, run immediately, or view results. See [Scheduled Tasks](../routines/scheduled-tasks.md) for details.
+
 ### Skills
 
 Browse all installed skills grouped by prefix (`social-`, `fin-`, `int-`, `prod-`, etc). Click a skill to see its full description, trigger conditions, and source file.
@@ -1054,16 +1058,7 @@ if __name__ == "__main__":
     run()
 ```
 
-### 2. Makefile Target
-
-Added to the project Makefile:
-
-```makefile
-competitor-check: ## Daily competitor check (sage)
-	@python3 ADWs/routines/custom/competitor-check.py
-```
-
-### 3. YAML Entry
+### 2. YAML Entry
 
 Added to `config/routines.yaml`:
 
@@ -1098,10 +1093,10 @@ Here's the full walkthrough:
 
 **You:** "HTML report in the strategy folder, plus a Telegram summary"
 
-Claude then generates the script, Makefile target, and YAML entry. You can test it immediately:
+Claude then generates the script and YAML entry. Routines are discovered dynamically — no Makefile changes needed. Test it immediately:
 
 ```bash
-make competitor-check
+make run R=competitor-check
 ```
 
 ## Where Files Live
@@ -1109,9 +1104,8 @@ make competitor-check
 | File | Location |
 |---|---|
 | Custom routine scripts | `ADWs/routines/custom/` |
-| Built-in routine scripts | `ADWs/routines/` |
+| Core routine scripts | `ADWs/routines/` |
 | Routine config | `config/routines.yaml` |
-| Makefile targets | `Makefile` |
 | Generated reports | Varies by agent (e.g., `09 Estrategia/`, `05 Financeiro/`) |
 
 ## Testing
@@ -1119,22 +1113,26 @@ make competitor-check
 After creation, test your routine:
 
 ```bash
-# Run directly
-make <target-name>
+# Run by ID (dynamic discovery)
+make run R=competitor-check
+
+# List all available routines
+make list-routines
 
 # Check logs
 make logs
-
-# See all available routines
-make help
 ```
 
 ## Managing Routines
 
-- **Edit schedule**: Update the cron expression in `config/routines.yaml`
-- **Disable**: Comment out or remove the YAML entry
+- **Edit schedule**: Update the entry in `config/routines.yaml`
+- **Disable**: Set `enabled: false` or remove the YAML entry
 - **View metrics**: `make metrics` shows token usage and cost per routine
 - **Scheduler**: `make scheduler` runs all routines on their configured schedules
+
+## One-Off Actions
+
+If you need to run something **once** at a specific time (not recurring), use [Scheduled Tasks](../routines/scheduled-tasks.md) instead. Say "schedule this for Friday at 10am" or use the `schedule-task` skill.
 
 
 ---
@@ -3853,7 +3851,6 @@ make setup           # Interactive setup wizard (runs setup.py)
                      # Checks prerequisites (Claude Code, uv, Node.js)
                      # Installs Python deps via `uv sync`
                      # Creates config files, .env, CLAUDE.md, workspace folders
-                     # Builds the dashboard frontend via npm
 ```
 
 ## Dashboard
@@ -3875,43 +3872,21 @@ make memory-lint     # Memory health check -- contradictions, gaps, stale data (
 make weekly          # Full weekly review (@clawdia)
 ```
 
-## Custom Routines -- Daily
+## Dynamic Routine Runner
+
+Custom routines (user-specific, in `ADWs/routines/custom/`) are run via the dynamic runner. No hardcoded Makefile targets needed -- routines are discovered automatically from script files.
 
 ```bash
-make sync            # Sync Fathom meetings (@clawdia)
-make triage          # Email triage (@clawdia)
-make review          # Organize Todoist tasks (@clawdia)
-make dashboard       # Consolidated 360 dashboard (@clawdia)
-make community       # Daily Discord community pulse (@pulse)
-make faq             # FAQ sync -- Discord + GitHub (@pulse)
-make fin-pulse       # Financial pulse -- Stripe + Omie snapshot (@flux)
-make licensing       # Licensing daily -- open source telemetry (@atlas)
-make social          # Social analytics -- cross-platform report (@pixel)
-make youtube         # YouTube channel analytics (@pixel)
-make instagram       # Instagram profile analytics (@pixel)
-make linkedin        # LinkedIn profile analytics (@pixel)
+make run R=fin-pulse        # Financial pulse (@flux)
+make run R=community        # Daily community pulse (@pulse)
+make run R=licensing-month  # Monthly licensing report (@atlas)
+make run R=social           # Social analytics (@pixel)
+make run R=strategy         # Strategy digest (@sage)
+
+make list-routines          # List all available routines (core + custom)
 ```
 
-## Custom Routines -- Weekly
-
-```bash
-make fin-weekly      # Financial weekly report (@flux)
-make licensing-weekly # Licensing weekly -- open source growth (@atlas)
-make trends          # Trend analysis -- community, GitHub, financial (@clawdia)
-make linear          # Linear review -- issues, blockers, stale (@atlas)
-make github          # GitHub review -- PRs, issues, stars (@atlas)
-make community-week  # Weekly Discord community report (@pulse)
-make strategy        # Strategy digest -- consolidated business view (@sage)
-make health          # Weekly health check-in (@kai)
-```
-
-## Custom Routines -- Monthly
-
-```bash
-make fin-close       # Monthly close kickoff (@flux)
-make community-month # Monthly community report (@pulse)
-make licensing-month # Monthly licensing report (@atlas)
-```
+Any script in `ADWs/routines/` or `ADWs/routines/custom/` is automatically discoverable. The routine ID is derived from the script name (e.g., `financial_pulse.py` becomes `fin-pulse`).
 
 ## Combos
 
@@ -3941,11 +3916,12 @@ make clean-logs      # Remove logs older than 30 days
 ## Docker (VPS Deployment)
 
 ```bash
-make docker-up       # Start scheduler + telegram in Docker
-make docker-down     # Stop all containers
-make docker-logs     # Show container logs (follow mode)
+make docker-dashboard  # Start dashboard in Docker (port 8080)
+make docker-telegram   # Start Telegram bot in Docker
+make docker-down       # Stop all containers
+make docker-logs       # Show container logs (follow mode)
 make docker-run ADW=good_morning.py  # Run a specific routine in Docker
-make docker-build    # Build the Docker image
+make docker-build      # Build the Docker image
 ```
 
 ## Help
@@ -4500,6 +4476,8 @@ ADWs/routines/
 
 **Core routines** ship with the repo and cover the essential daily loop: good_morning, end_of_day, memory_sync, memory_lint, and weekly_review. Their schedules are hardcoded in `scheduler.py` — they do NOT come from `config/routines.yaml`. See [Core Routines](core-routines.md) for a detailed explanation of each one and why they matter.
 
+> **Dynamic Discovery:** Routines are discovered dynamically by scanning script files. The agent is extracted from each script's docstring (`via AgentName` pattern). No hardcoded mappings needed — add a new script and it's automatically available in the dashboard, API, and `make run`.
+
 > **Note:** Memory maintenance follows the LLM Wiki pattern. The `memory_sync` routine (daily) handles ingest with cross-reference propagation (updating related memory files when one changes). The `memory_lint` routine (weekly) performs health checks: detecting contradictions, stale data, orphan files, and coverage gaps. Both routines update `memory/index.md` (catalog) and `memory/log.md` (operation log).
 
 **Example routines** live in `ADWs/routines/examples/` and are tracked with the repo. These are reference implementations for common integrations (Discord, Stripe, YouTube, etc).
@@ -4635,32 +4613,47 @@ The `create-routine` skill walks you through:
 3. Which skill it invokes
 4. The schedule (daily/weekly/monthly)
 
-It generates the Python script, adds a Makefile target, and updates `config/routines.yaml`.
+It generates the Python script and updates `config/routines.yaml`. No Makefile changes needed — routines are discovered dynamically.
 
 ### Manually
 
 1. Create `ADWs/routines/custom/my_routine.py` following the pattern above
 2. Add an entry to `config/routines.yaml`
-3. Add a Makefile target (optional, for manual runs)
 
 ## Manual Execution
 
-Run any routine directly via make:
+Core routines have dedicated make targets. All routines (core and custom) can be run with the dynamic runner:
 
 ```bash
+# Core targets
 make morning         # Morning briefing
 make eod             # End of day
-make community       # Community pulse
-make fin-pulse       # Financial pulse
+make memory          # Memory sync
+make memory-lint     # Memory lint
 make weekly          # Weekly review
-make licensing       # Licensing daily
-make social          # Social analytics
+
+# Dynamic runner (any routine by ID)
+make run R=fin-pulse        # Financial pulse
+make run R=community        # Community pulse
+make run R=licensing-month  # Licensing monthly
+
+# List all available routines
+make list-routines
 ```
 
 Or run the Python script directly:
 
 ```bash
-python3 ADWs/routines/examples/community_daily.py
+python3 ADWs/routines/custom/community_daily.py
+```
+
+## Scheduled Tasks (One-Off)
+
+For actions that should run **once** at a specific time (not recurring), use **Scheduled Tasks** instead of routines. See [Scheduled Tasks](scheduled-tasks.md) for details.
+
+```
+"Post no LinkedIn sexta 10h" → scheduled task (one-off)
+"Check community every day at 20h" → routine (recurring)
 ```
 
 ## Logs and Metrics
@@ -4697,6 +4690,144 @@ make clean-logs      # Remove logs older than 30 days
 
 ---
 
+# Scheduled Tasks
+
+Scheduled tasks are **one-off actions** that execute once at a specified date/time. Unlike routines (which repeat on a cron schedule), a scheduled task runs once and is done.
+
+## Use Cases
+
+- "Post no LinkedIn sexta 10h" -- schedule a skill to run at a specific time
+- "Roda o financial pulse amanha 8h" -- run an existing script at a future time
+- "Envia resumo pro Telegram as 14h" -- send a prompt to an agent later
+
+## Task Types
+
+| Type | Payload | What Happens |
+|------|---------|--------------|
+| **skill** | Skill name + args | Calls Claude CLI executing the skill via an agent |
+| **prompt** | Free-form text | Sends a raw prompt to Claude CLI via an agent |
+| **script** | Script path | Runs a Python script directly (no AI) |
+
+## Creating Tasks
+
+### Via CLI (skill)
+
+Say "schedule this for" or use the `schedule-task` skill:
+
+```
+agendar post no LinkedIn pra sexta 10h sobre o Summit
+```
+
+Claude parses the intent, confirms the details, and creates the task via API.
+
+### Via Dashboard
+
+Go to `/tasks` in the dashboard:
+
+1. Click **"+ New Task"**
+2. Fill in: name, type, payload, agent, date/time
+3. Click **Schedule**
+
+The task appears in the list as "pending".
+
+### Via API
+
+```bash
+POST /api/tasks
+{
+  "name": "Post LinkedIn -- Summit",
+  "type": "skill",
+  "payload": "social-post-writer LinkedIn post about Evolution Summit",
+  "agent": "pixel-social-media",
+  "scheduled_at": "2026-04-11T16:00:00Z"
+}
+```
+
+## Task Lifecycle
+
+```
+pending --> running --> completed
+                   --> failed (can retry)
+pending --> cancelled
+```
+
+- **pending** -- waiting for scheduled time
+- **running** -- currently executing
+- **completed** -- finished successfully
+- **failed** -- error occurred (can be retried with "Run Now")
+- **cancelled** -- manually cancelled before execution
+
+## How Execution Works
+
+1. The scheduler loop (every 30 seconds) queries: `WHERE status='pending' AND scheduled_at <= NOW()`
+2. Each matching task is executed in a background thread
+3. For `skill` and `prompt` types, the task uses `ADWs/runner.py` (same infrastructure as routines)
+4. For `script` type, the Python script runs as a subprocess
+5. Results are saved in `result_summary`; errors in `error`
+6. Status updates to `completed` or `failed`
+
+## API Reference
+
+| Method | Endpoint | Action | Permission |
+|--------|----------|--------|------------|
+| GET | `/api/tasks` | List tasks | `tasks:view` |
+| POST | `/api/tasks` | Create task | `tasks:execute` |
+| GET | `/api/tasks/<id>` | Get task detail | `tasks:view` |
+| PUT | `/api/tasks/<id>` | Edit pending task | `tasks:execute` |
+| DELETE | `/api/tasks/<id>` | Cancel/delete task | `tasks:execute` |
+| POST | `/api/tasks/<id>/run` | Execute immediately | `tasks:execute` |
+
+Query parameters for GET `/api/tasks`:
+- `status` -- filter by status (pending, running, completed, failed, cancelled)
+- `page` -- page number (default: 1)
+- `per_page` -- items per page (default: 50)
+
+## Dashboard Page
+
+The `/tasks` page shows:
+
+- **Filter tabs** -- All, Pending, Running, Completed, Failed
+- **Task table** -- name, type badge, agent badge, scheduled time, status, actions
+- **Create modal** -- form with name, description, type, payload, agent, datetime
+- **View result modal** -- shows output/error for completed/failed tasks
+
+### Actions by Status
+
+| Status | Available Actions |
+|--------|-------------------|
+| pending | Edit, Run Now, Cancel |
+| running | (none -- waiting) |
+| completed | View Result, Delete |
+| failed | View Result, Retry, Delete |
+| cancelled | Delete |
+
+## Agents
+
+| Agent ID | Display |
+|----------|---------|
+| `clawdia-assistant` | @clawdia |
+| `flux-financeiro` | @flux |
+| `atlas-project` | @atlas |
+| `pulse-community` | @pulse |
+| `pixel-social-media` | @pixel |
+| `sage-strategy` | @sage |
+| `kai-personal-assistant` | @kai |
+| `nex-comercial` | @nex |
+| `mentor-courses` | @mentor |
+
+## Tasks vs Routines
+
+| | Scheduled Task | Routine |
+|---|---|---|
+| **Frequency** | Once | Recurring (daily/weekly/monthly) |
+| **Defined in** | SQLite database | `config/routines.yaml` + script file |
+| **Created via** | Dashboard UI, API, or `schedule-task` skill | `create-routine` skill |
+| **Execution** | Scheduler checks every 30s | Scheduler runs on cron schedule |
+| **Output** | Saved in DB (`result_summary`) | Saved to files + metrics.json |
+
+
+---
+
 # Skills Overview
 
 Skills teach Claude new capabilities through markdown instructions. They are not plugins or code — they are structured prompts that Claude follows when a skill is triggered.
@@ -4722,7 +4853,7 @@ A skill is a directory in `.claude/skills/` containing a `SKILL.md` file with:
 
 Skills are organized by prefix:
 
-The repo ships **~80 skills** (non-evo). If you install [Evo Method](https://github.com/EvolutionAPI/EVO-METHOD) separately, you get ~45 additional `evo-` skills — these are gitignored from this repo but work normally when present locally.
+The repo ships **~81 skills** (non-evo). If you install [Evo Method](https://github.com/EvolutionAPI/EVO-METHOD) separately, you get ~45 additional `evo-` skills — these are gitignored from this repo but work normally when present locally.
 
 | Prefix | Category | Count | Examples |
 |--------|----------|-------|----------|

@@ -123,6 +123,7 @@ from routes.auth_routes import bp as auth_bp
 from routes.systems import bp as systems_bp
 from routes.docs import bp as docs_bp
 from routes.mempalace import bp as mempalace_bp
+from routes.tasks import bp as tasks_bp
 
 app.register_blueprint(overview_bp)
 app.register_blueprint(reports_bp)
@@ -141,6 +142,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(systems_bp)
 app.register_blueprint(docs_bp)
 app.register_blueprint(mempalace_bp)
+app.register_blueprint(tasks_bp)
 
 # --------------- Terminal WebSocket ---------------
 from routes.terminal import bp as terminal_bp, init_websocket
@@ -291,6 +293,34 @@ if __name__ == "__main__":
         pass
     # Start scheduler in background thread
     import threading
+    def _run_pending_tasks():
+        """Check for pending scheduled tasks and execute them."""
+        from datetime import datetime as _dt, timezone as _tz
+        from models import ScheduledTask
+        from routes.tasks import _execute_task
+
+        try:
+            now = _dt.now(_tz.utc)
+            pending = ScheduledTask.query.filter(
+                ScheduledTask.status == "pending",
+                ScheduledTask.scheduled_at <= now,
+            ).all()
+
+            for task in pending:
+                log_path = WORKSPACE / "ADWs" / "logs" / "scheduler.log"
+                with open(log_path, "a") as log:
+                    log.write(f"  [{_dt.now().strftime('%H:%M')}] Running scheduled task #{task.id}: {task.name}\n")
+
+                t = threading.Thread(target=_execute_task_with_context, args=(task.id,), daemon=True)
+                t.start()
+        except Exception as e:
+            pass  # Don't crash scheduler loop on task errors
+
+    def _execute_task_with_context(task_id):
+        with app.app_context():
+            from routes.tasks import _execute_task
+            _execute_task(task_id)
+
     def _run_scheduler():
         log_path = WORKSPACE / "ADWs" / "logs" / "scheduler.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -311,6 +341,9 @@ if __name__ == "__main__":
 
                 while True:
                     sched_lib.run_pending()
+                    # Check for one-off scheduled tasks
+                    with app.app_context():
+                        _run_pending_tasks()
                     _time.sleep(30)
         except Exception as e:
             with open(log_path, "a") as log:
