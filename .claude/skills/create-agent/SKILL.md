@@ -89,7 +89,29 @@ Launch the custom-{name} agent.
 Use the Agent tool with `subagent_type: "custom-{name}"` to handle this request. The agent has its own memory in `.claude/agent-memory/custom-{name}/` and its system prompt in `.claude/agents/custom-{name}.md`.
 ```
 
-## Step 4: Create Memory Folder
+## Step 4: Register in Dashboard (core agents only)
+
+If the agent does NOT have the `custom-` prefix (i.e., it's a core agent that will be committed to the repo), add it to `AGENT_META` in `dashboard/frontend/src/pages/Agents.tsx`:
+
+1. Add the icon import from `lucide-react` at the top of the file
+2. Add an entry to the `AGENT_META` object:
+
+```typescript
+'{agent-name}': {
+  icon: {IconName},
+  color: '{hex color from frontmatter}',
+  colorMuted: '{color}1F',
+  glowColor: '{color}26',
+  command: '/{command-name}',
+  label: '{domain label}',
+},
+```
+
+Without this step, the agent card in the dashboard will show a generic icon and no `/command` badge.
+
+**Skip this step for custom agents** — they use `DEFAULT_META` with dynamic colors from frontmatter automatically.
+
+## Step 5: Create Memory Folder
 
 ```bash
 mkdir -p .claude/agent-memory/custom-{name}
@@ -97,7 +119,7 @@ mkdir -p .claude/agent-memory/custom-{name}
 
 The memory folder is already gitignored (`.claude/agent-memory/` is in `.gitignore`).
 
-## Step 5: Verify
+## Step 6: Verify
 
 Run a quick check:
 ```bash
