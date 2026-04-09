@@ -18,13 +18,21 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
+    # Static assets — long cache
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
+    }
+
+    # Serve raw doc files directly (markdown, txt, json)
+    location ~* \.(md|txt|json)$ {
+        add_header Content-Type "text/plain; charset=utf-8";
+        try_files $uri =404;
+    }
+
+    # SPA fallback — serve index.html for all other routes
+    location / {
+        try_files $uri /index.html;
     }
 }
 EOF
