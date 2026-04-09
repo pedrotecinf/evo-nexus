@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-04-08
+
+### Added
+- **Landing page** (`site/`) — standalone React + Vite static site, extracted from Replit monorepo
+- **Docker support for site** — multi-stage Dockerfile (node build → nginx serve) + docker-compose
+- **GitHub Actions CI** — workflow builds site image and pushes to `ghcr.io/evolutionapi/open-claude/site` on push/release
+- **Docs bundled in site image** — `docs/` copied into site build context automatically
+
+### Changed
+- **`.gitignore` updated** — site tracked in repo (Replit artifacts, node_modules, dist excluded)
+- **Site assets renamed** — clean filenames (`logo.png`, `print-overview.png`, etc.) instead of Replit hashes
+
 ## [0.3.0] - 2026-04-08
 
 ### Added
