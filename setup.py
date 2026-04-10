@@ -69,14 +69,22 @@ def check_prerequisites():
         errors.append("node")
 
     # npm
+    npm_cmd = "npm"
     try:
-        result = subprocess.run(["npm", "--version"], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            print(f"  {GREEN}✓{RESET} npm: {DIM}v{result.stdout.strip()}{RESET}")
-        else:
-            errors.append("npm")
+        result = subprocess.run([npm_cmd, "--version"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            raise FileNotFoundError
+        print(f"  {GREEN}✓{RESET} npm: {DIM}v{result.stdout.strip()}{RESET}")
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        errors.append("npm")
+        try:
+            npm_cmd = "npm.cmd"
+            result = subprocess.run([npm_cmd, "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                print(f"  {GREEN}✓{RESET} npm: {DIM}v{result.stdout.strip()}{RESET}")
+            else:
+                errors.append("npm")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            errors.append("npm")
 
     print()
 
@@ -88,8 +96,10 @@ def check_prerequisites():
         if "uv" in errors:
             print(f"    {RED}•{RESET} uv (Python package manager) — {BOLD}https://docs.astral.sh/uv/{RESET}")
             print(f"      {DIM}curl -LsSf https://astral.sh/uv/install.sh | sh{RESET}")
-        if "node" in errors or "npm" in errors:
+        if "node" in errors:
             print(f"    {RED}•{RESET} Node.js 18+ — {BOLD}https://nodejs.org{RESET}")
+        if "npm" in errors:
+            print(f"    {RED}•{RESET} npm not found (Node.js installed but npm missing from PATH) — {BOLD}https://nodejs.org{RESET}")
         print()
         print(f"  {YELLOW}Install the missing tools and run setup again.{RESET}")
         sys.exit(1)
@@ -333,7 +343,7 @@ def copy_env_example(config: dict):
         print(f"  {GREEN}✓{RESET} Created .env from .env.example")
     else:
         print(f"  {YELLOW}!{RESET} .env.example not found, creating empty .env")
-        dst.write_text("# EvoNexus Environment Variables\n# Fill in your API keys below\n\n")
+        dst.write_text("# EvoNexus Environment Variables\n# Fill in your API keys below\n\n", encoding="utf-8")
 
 
 def copy_routines_config(config: dict):
@@ -346,7 +356,7 @@ def copy_routines_config(config: dict):
     if src.exists():
         shutil.copy2(src, dst)
     else:
-        dst.write_text("# EvoNexus Routines — edit schedules here\n# See ROUTINES.md for documentation\n\ndaily: []\nweekly: []\nmonthly: []\n")
+        dst.write_text("# EvoNexus Routines — edit schedules here\n# See ROUTINES.md for documentation\n\ndaily: []\nweekly: []\nmonthly: []\n", encoding="utf-8")
     print(f"  {GREEN}✓{RESET} Created config/routines.yaml")
 
 
@@ -407,7 +417,7 @@ def main():
     # workspace.yaml
     config_dir = WORKSPACE / "config"
     config_dir.mkdir(exist_ok=True)
-    (config_dir / "workspace.yaml").write_text(generate_workspace_yaml(config))
+    (config_dir / "workspace.yaml").write_text(generate_workspace_yaml(config), encoding="utf-8")
     print(f"  {GREEN}✓{RESET} Generated config/workspace.yaml")
 
     # .env
@@ -418,7 +428,7 @@ def main():
 
     # CLAUDE.md
     claude_md = generate_claude_md(config)
-    (WORKSPACE / "CLAUDE.md").write_text(claude_md)
+    (WORKSPACE / "CLAUDE.md").write_text(claude_md, encoding="utf-8")
     print(f"  {GREEN}✓{RESET} Generated CLAUDE.md")
 
     # Folders
