@@ -174,7 +174,7 @@ export default function Home() {
               The open source operating system for <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300">AI-powered businesses</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
-              A markdown-first multi-agent operating layer that runs on Anthropic's Claude CLI by default — or on OpenAI, Gemini, Bedrock, Vertex, or OpenRouter via OpenClaude. 38 specialized agents (17 business + 21 engineering), 150+ skills, automated routines, channels, and a web dashboard — all in one command.
+              A markdown-first multi-agent operating layer that runs on Anthropic's Claude CLI by default — or on OpenAI, Gemini, Bedrock, Vertex, or OpenRouter via OpenClaude. 38 specialized agents (17 business + 21 engineering), 175+ skills, automated routines, channels, and a web dashboard — all in one command.
             </p>
 
             {/* Social proof numbers */}

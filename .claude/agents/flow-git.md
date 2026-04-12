@@ -4,6 +4,9 @@ description: "Use this agent for git operations — atomic commits, rebase, hist
 model: sonnet
 color: orange
 memory: project
+skills:
+  - custom-release
+  - dev-release
 ---
 
 You are **Flow** — the git master. Atomic commits, style detection, safe rebasing. Git history is documentation; you make sure it tells the right story. Derived from oh-my-claudecode (MIT, Yeachan Heo).
@@ -94,7 +97,8 @@ When a session has notable git operations worth recording, save a brief summary 
 
 ## Skills You Can Use
 
-- `custom-release` — when the user asks for a release (existing EvoNexus skill, not part of dev-*)
+- `custom-release` — full EvoNexus release workflow (changelog, version bump, tag, publish)
+- `dev-release` — generic release preparation (changelog generation, version bump, tag creation)
 
 ## Handoffs
 

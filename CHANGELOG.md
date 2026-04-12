@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-04-12
+
+### Added
+
+- **Multi-provider AI support** — switch between Anthropic (native Claude), OpenAI (GPT-5.x via Codex OAuth or API key), and OpenRouter (200+ models) from the dashboard. Provider toggle with on/off per provider, session blocking when none active, clean env whitelist to prevent stale API key leaks. (PR #4, @NeritonDias)
+- **OpenAI Codex OAuth flow** — browser OAuth + device auth via dashboard endpoints (`auth-start`, `auth-complete`, `device-start`, `device-poll`, `status`, `logout`). Tokens saved in correct Codex format (`~/.codex/auth.json`).
+- **Agent persona enforcement for non-Anthropic providers** — `--system-prompt` replaces default prompt for GPT/Gemini so agents respond in character.
+- **Setup hardening for VPS** — auto-install prerequisites (Node.js 24.x, build-essential, uv, Claude CLI, OpenClaude), Nginx + SSL (certbot default, self-signed fallback), IPv6, firewall, proper sudo/permissions handling, service auto-start with health checks.
+- **YouTube Competitive Analysis skill** (`social-yt-competitive`) — analyze YouTube channels for outlier videos and packaging patterns.
+- **MemPalace worker** (`dashboard/backend/routes/_mempalace_worker.py`) — background worker for Knowledge Base indexing.
+
+### Changed
+
+- **Complete agent-skill audit** — all 38 agents now declare their skills in YAML frontmatter AND in the prompt body ("Skills You Can Use" section for engineering agents). 25/25 `dev-*` skills assigned to agent owners (zero orphans). Business agents expanded: Kai (+3), Sage (+3), Nex (+6), Mentor (+4), Oracle (+6), Atlas (+3). Engineering agents fixed: Raven, Zen, Vault, Trail, Scroll, Prism, Quill, Flow (+frontmatter). Orchestrators Helm and Mirror gained dedicated skill sections.
+- **UI redesign — Setup, Login, Providers pages** — canvas API neural network animated background, solid cards, no glassmorphism/sparkles, professional form UX with autocomplete, accessible toggle switches with `role="switch"`.
+- **Image optimization** — agent avatars PNG→WebP (271MB → 1.7MB, 99.4% reduction), docs/public screenshots PNG→WebP (67-73% reduction).
+- **Onboarding flow restored** — `workspace-status` endpoint now checks if `owner` field is actually filled, not just if file exists.
+- **Dead routes removed** — `/chat` quick actions replaced with Agents and Providers links.
+- **Skill count bumped to 175+** across README, docs, site, rules.
+- **README clone instruction** — added `--depth 1` for faster cloning.
+- **Providers marked as coming soon** — Gemini, Bedrock, Vertex flagged with `coming_soon: true`.
+
+### Fixed
+
+- **Terminal server spread order** — `...options` moved before explicit properties in `startSession` to prevent `agent` being overwritten with `undefined`.
+- **Clean env whitelist** — spawned CLI processes only inherit 22 whitelisted system vars + provider env, preventing stale `OPENAI_API_KEY` leaks.
+- **Root detection** — skips `--dangerously-skip-permissions` for root users.
+- **uv sync as SUDO_USER** — `.venv` symlinks now point to user's Python, not root's.
+- **File ownership** — `chown -R` + `chmod +x .venv/bin/` before starting services.
+
 ## [0.15.1] - 2026-04-11
 
 ### Changed

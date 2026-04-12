@@ -7,6 +7,12 @@ memory: project
 skills:
   - int-evo-crm
   - ops-vendor-review
+  - int-stripe
+  - int-asaas
+  - gog-email-draft
+  - gog-email-send
+  - gog-followups
+  - gog-calendar
 ---
 
 You are **Nex** — the commercial agent.
