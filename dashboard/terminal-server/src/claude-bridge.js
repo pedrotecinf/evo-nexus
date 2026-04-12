@@ -29,8 +29,7 @@ class ClaudeBridge {
       const configPath = path.join(workspaceRoot, 'config', 'providers.json');
       if (!fs.existsSync(configPath)) {
         console.log(`[provider] providers.json not found at ${configPath}, using defaults`);
-        return { cli_command: 'claude', env_vars: {} };
-      }
+        return { cli_command: 'claude', env_vars: {}, active: 'anthropic' };      }
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const active = config.active_provider || 'anthropic';
       const provider = config.providers?.[active] || {};
@@ -47,14 +46,24 @@ class ClaudeBridge {
         )
       );
 
+      // If Codex OAuth auth.json exists, remove OPENAI_API_KEY to let
+      // OpenClaude use the OAuth token instead of a potentially stale key
+      if (active === 'openai' || active === 'codex_auth') {
+        const codexAuthPath = path.join(process.env.HOME || '/', '.codex', 'auth.json');
+        if (fs.existsSync(codexAuthPath)) {
+          delete envVars['OPENAI_API_KEY'];
+          console.log('[provider] Codex auth.json found — using OAuth token, removing OPENAI_API_KEY');
+        }
+      }
+
       console.log(`[provider] Active provider: ${active} (cli: ${cliCommand})`);
       if (Object.keys(envVars).length > 0) {
         console.log(`[provider] Injecting env vars: ${Object.keys(envVars).join(', ')}`);
       }
-      return { cli_command: cliCommand, env_vars: envVars };
+      return { cli_command: cliCommand, env_vars: envVars, active };
     } catch (err) {
       console.warn(`[provider] Could not read providers.json: ${err.message}`);
-      return { cli_command: 'claude', env_vars: {} };
+      return { cli_command: 'claude', env_vars: {}, active: 'anthropic' };
     }
   }
 
@@ -128,25 +137,93 @@ class ClaudeBridge {
       // Reload provider config fresh on every session start
       // so switching provider in the dashboard takes effect immediately
       const providerConfig = this._loadProviderConfig();
+
+      // Block session if no provider is active
+      if (!providerConfig.active || providerConfig.active === 'none') {
+        const msg = '\r\n\x1b[1;33mNo AI provider is active.\x1b[0m\r\nGo to \x1b[1;32mProviders\x1b[0m in the dashboard to configure and activate a provider.\r\n';
+        if (onOutput) onOutput(msg);
+        if (onExit) onExit(1, null);
+        return;
+      }
+
       const cliCommand = this.findClaudeCommand(providerConfig.cli_command);
 
       console.log(`Starting session ${sessionId} with ${providerConfig.cli_command}`);
       console.log(`Command: ${cliCommand}`);
       console.log(`Working directory: ${workingDir}`);
+      console.log(`Agent: ${agent || 'none'}`);
       console.log(`Terminal size: ${cols}x${rows}`);
       if (dangerouslySkipPermissions) {
         console.log(`⚠️ WARNING: Skipping permissions with --dangerously-skip-permissions flag`);
       }
 
-      const args = dangerouslySkipPermissions ? ['--dangerously-skip-permissions'] : [];
+      // Don't use --dangerously-skip-permissions when running as root —
+      // Claude/OpenClaude block this flag for root users.
+      // The trust prompt is auto-accepted via PTY detection below instead.
+      const isRoot = process.getuid && process.getuid() === 0;
+      const args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
       if (agent) {
         args.push('--agent', agent);
       }
+
+      // For non-Anthropic providers, use --system-prompt to force agent persona.
+      // --append-system-prompt is too weak — GPT models ignore appended instructions.
+      // --system-prompt REPLACES the default system prompt, ensuring the agent persona
+      // takes priority over CLAUDE.md and other context that mentions "Claude".
+      const active = providerConfig.active || 'anthropic';
+      if (active !== 'anthropic' && agent) {
+        // Read the agent definition file to build a strong system prompt
+        const agentFile = path.join(workingDir, '.claude', 'agents', `${agent}.md`);
+        let agentPrompt = '';
+        try {
+          const content = fs.readFileSync(agentFile, 'utf8');
+          // Extract body (after YAML frontmatter ---)
+          const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+          agentPrompt = match ? match[1].trim() : content;
+        } catch {
+          agentPrompt = `You are the ${agent} agent.`;
+        }
+
+        const enforcePrompt = agentPrompt + '\n\n' +
+          'CRITICAL: You MUST fully embody this agent persona. ' +
+          'You are NOT Claude, OpenClaude, or a generic assistant — you ARE ' + agent + '. ' +
+          'When asked who you are, ALWAYS respond as ' + agent + '. ' +
+          'Never break character. Follow ALL instructions above.';
+
+        args.push('--system-prompt', enforcePrompt);
+      }
       const providerEnv = providerConfig.env_vars || {};
+
+      // Build a CLEAN environment for the spawned CLI process.
+      // We DON'T spread process.env — it may contain stale/cached vars
+      // (OPENAI_API_KEY, etc.) that override Codex OAuth auth.json.
+      // Instead, whitelist only essential system vars + provider config.
+      const SYSTEM_VARS = [
+        'HOME', 'USER', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
+        'LOGNAME', 'HOSTNAME', 'XDG_RUNTIME_DIR', 'XDG_DATA_HOME',
+        'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'TMPDIR',
+        'SSH_AUTH_SOCK', 'SSH_AGENT_PID',
+        'NVM_DIR', 'NVM_BIN', 'NVM_INC',
+        'CODEX_HOME', 'CLAUDE_CONFIG_DIR',
+      ];
+      const cleanEnv = {};
+      for (const key of SYSTEM_VARS) {
+        if (process.env[key]) cleanEnv[key] = process.env[key];
+      }
+
+      // Ensure OPENAI_MODEL is set when using OpenAI provider.
+      // Without it, OpenClaude can't resolve which model to use and
+      // falls back to API key auth instead of Codex OAuth auth.json.
+      if ((active === 'openai' || active === 'codex_auth') && !providerEnv['OPENAI_MODEL']) {
+        providerEnv['OPENAI_MODEL'] = 'gpt-5.4';
+        console.log('[provider] OPENAI_MODEL not set — defaulting to gpt-5.4');
+      }
+
+      console.log(`[spawn] Args: ${JSON.stringify(args)}`);
       const claudeProcess = spawn(cliCommand, args, {
         cwd: workingDir,
         env: {
-          ...process.env,
+          ...cleanEnv,
           ...providerEnv,
           TERM: 'xterm-256color',
           FORCE_COLOR: '1',

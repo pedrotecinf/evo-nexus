@@ -372,8 +372,15 @@ class TerminalServer {
     const sessionId = wsInfo.claudeSessionId;
 
     try {
+      // Ensure agent name from session is passed even if options don't include it
+      const agentForSession = (options && options.agent) || session.agentName || null;
+      if (this.dev) console.log(`Starting agent: ${agentForSession} for session ${sessionId}`);
+
+      console.log(`[startClaude] Agent for session: ${agentForSession}, options.agent: ${options?.agent}`);
       await this.claudeBridge.startSession(sessionId, {
+        ...options,
         workingDir: session.workingDir,
+        agent: agentForSession,
         onOutput: (data) => {
           const currentSession = this.claudeSessions.get(sessionId);
           if (!currentSession) return;
@@ -393,7 +400,6 @@ class TerminalServer {
           if (currentSession) currentSession.active = false;
           this.broadcastToSession(sessionId, { type: 'error', message: error.message });
         },
-        ...options,
       });
 
       session.active = true;

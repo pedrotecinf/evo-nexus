@@ -20,7 +20,7 @@ This downloads and runs the interactive setup wizard automatically.
 ### Alternative: Manual Clone
 
 ```bash
-git clone https://github.com/EvolutionAPI/evo-nexus.git
+git clone --depth 1 https://github.com/EvolutionAPI/evo-nexus.git
 cd evo-nexus
 
 # Interactive setup wizard
@@ -78,7 +78,7 @@ make dashboard-app
 
 Open http://localhost:8080 — the first run shows a setup wizard where you create your admin account and configure the workspace.
 
-![Dashboard](imgs/doc-overview.png)
+![Dashboard](imgs/doc-overview.webp)
 
 ### 5. Start Automated Routines
 

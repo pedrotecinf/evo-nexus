@@ -5,14 +5,19 @@ determines which CLI binary (claude vs openclaude) and which env vars are
 injected when spawning sessions.
 """
 
+import base64
+import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
+import time
+import urllib.parse
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, redirect, request, session
 from flask_login import login_required
 
 from routes._helpers import WORKSPACE
@@ -20,6 +25,11 @@ from routes._helpers import WORKSPACE
 bp = Blueprint("providers", __name__)
 
 PROVIDERS_CONFIG = WORKSPACE / "config" / "providers.json"
+
+OPENAI_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+OPENAI_AUTH_URL = "https://auth.openai.com/oauth/authorize"
+OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token"
+CODEX_AUTH_FILE = Path.home() / ".codex" / "auth.json"
 
 # Allowlisted CLI commands — only these binaries can be spawned
 ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude"})
@@ -117,6 +127,44 @@ def _sanitize_env_vars(env_vars: dict) -> dict:
     return safe
 
 
+def _save_codex_auth(tokens: dict):
+    """Save tokens to ~/.codex/auth.json in the format OpenClaude/Codex expects.
+
+    The correct format uses auth_mode + tokens object, NOT the old
+    openai-codex wrapper that OpenClaude doesn't recognize.
+    """
+    import base64 as _b64
+
+    access_token = tokens["access_token"]
+    refresh_token = tokens.get("refresh_token", "")
+    id_token = tokens.get("id_token", access_token)
+
+    # Extract chatgpt_account_id from the access token JWT
+    account_id = ""
+    try:
+        payload_b64 = access_token.split(".")[1]
+        # Add padding
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        payload = json.loads(_b64.urlsafe_b64decode(payload_b64))
+        account_id = payload.get("https://api.openai.com/auth", {}).get("chatgpt_account_id", "")
+    except Exception:
+        pass
+
+    auth_data = {
+        "auth_mode": "Chatgpt",
+        "tokens": {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "id_token": id_token,
+            "account_id": account_id,
+        },
+        "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+    CODEX_AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CODEX_AUTH_FILE.write_text(json.dumps(auth_data, indent=2), encoding="utf-8")
+
+
 # ── Endpoints ──────────────────────────────────────────────
 
 
@@ -198,14 +246,15 @@ def get_active_provider():
 @bp.route("/api/providers/active", methods=["POST"])
 @login_required
 def set_active_provider():
-    """Set the active provider."""
+    """Set the active provider. Use provider_id='none' to disable all."""
     data = request.get_json(silent=True) or {}
     provider_id = data.get("provider_id")
-    if not provider_id:
+    if provider_id is None:
         return jsonify({"error": "provider_id is required"}), 400
 
     config = _read_config()
-    if provider_id not in config.get("providers", {}):
+    # Allow "none" to disable all providers
+    if provider_id != "none" and provider_id not in config.get("providers", {}):
         return jsonify({"error": f"Unknown provider: {provider_id}"}), 400
 
     config["active_provider"] = provider_id
@@ -305,3 +354,179 @@ def test_provider(provider_id):
         "cli": cli,
         "path": result["path"],
     })
+
+
+# ── OpenAI Auth Flow ──────────────────────────────
+
+
+@bp.route("/api/providers/openai/auth-start", methods=["POST"])
+@login_required
+def openai_auth_start():
+    """Generate PKCE + authorize URL for Browser OAuth flow."""
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode()).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    state = secrets.token_urlsafe(32)
+
+    session["openai_code_verifier"] = code_verifier
+    session["openai_oauth_state"] = state
+
+    params = {
+        "response_type": "code",
+        "client_id": OPENAI_CLIENT_ID,
+        "redirect_uri": "http://localhost:1455/auth/callback",
+        "scope": "openid profile email offline_access api.connectors.read api.connectors.invoke",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "state": state,
+        "id_token_add_organizations": "true",
+        "codex_cli_simplified_flow": "true",
+    }
+    url = f"{OPENAI_AUTH_URL}?{urllib.parse.urlencode(params)}"
+    return jsonify({"authorize_url": url})
+
+
+@bp.route("/api/providers/openai/auth-complete", methods=["POST"])
+@login_required
+def openai_auth_complete():
+    """Receive callback URL pasted by user, extract code, exchange for tokens."""
+    import requests as http_req
+
+    data = request.get_json(silent=True) or {}
+    callback_url = data.get("callback_url", "")
+
+    parsed = urllib.parse.urlparse(callback_url)
+    params = urllib.parse.parse_qs(parsed.query)
+    code = params.get("code", [None])[0]
+
+    if not code:
+        return jsonify({"error": "URL invalida - nao contem codigo de autorizacao"}), 400
+
+    code_verifier = session.pop("openai_code_verifier", None)
+    if not code_verifier:
+        return jsonify({"error": "Sessao expirada - inicie o login novamente"}), 400
+
+    session.pop("openai_oauth_state", None)
+
+    resp = http_req.post(OPENAI_TOKEN_URL, data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://localhost:1455/auth/callback",
+        "client_id": OPENAI_CLIENT_ID,
+        "code_verifier": code_verifier,
+    }, timeout=30)
+
+    if resp.status_code != 200:
+        return jsonify({"error": f"Falha na troca de token (HTTP {resp.status_code})"}), 400
+
+    _save_codex_auth(resp.json())
+
+    config = _read_config()
+    config["active_provider"] = "openai"
+    _write_config(config)
+
+    return jsonify({"status": "ok", "message": "Autenticado com sucesso!"})
+
+
+@bp.route("/api/providers/openai/device-start", methods=["POST"])
+@login_required
+def openai_device_start():
+    """Start device auth flow."""
+    import requests as http_req
+
+    resp = http_req.post("https://auth.openai.com/deviceauth/usercode", json={
+        "client_id": OPENAI_CLIENT_ID,
+    }, timeout=15)
+
+    if resp.status_code != 200:
+        return jsonify({"error": "Device auth nao disponivel para sua organizacao"}), 400
+
+    data = resp.json()
+    session["openai_device_auth_id"] = data["device_auth_id"]
+    session["openai_device_user_code"] = data["user_code"]
+
+    return jsonify({
+        "user_code": data["user_code"],
+        "verification_url": "https://auth.openai.com/codex/device",
+        "interval": data.get("interval", 5),
+        "expires_in": data.get("expires_in", 900),
+    })
+
+
+@bp.route("/api/providers/openai/device-poll", methods=["POST"])
+@login_required
+def openai_device_poll():
+    """Poll for device auth authorization."""
+    import requests as http_req
+
+    device_auth_id = session.get("openai_device_auth_id")
+    user_code = session.get("openai_device_user_code")
+    if not device_auth_id:
+        return jsonify({"status": "error", "message": "Nenhum login pendente"}), 400
+
+    resp = http_req.post("https://auth.openai.com/deviceauth/token", json={
+        "device_auth_id": device_auth_id,
+        "user_code": user_code,
+    }, timeout=15)
+
+    if resp.status_code in (403, 404):
+        return jsonify({"status": "pending"})
+
+    if resp.status_code != 200:
+        return jsonify({"status": "error", "message": "Polling falhou"}), 500
+
+    auth_data = resp.json()
+
+    token_resp = http_req.post(OPENAI_TOKEN_URL, data={
+        "grant_type": "authorization_code",
+        "code": auth_data["authorization_code"],
+        "code_verifier": auth_data["code_verifier"],
+        "client_id": OPENAI_CLIENT_ID,
+    }, timeout=15)
+
+    if token_resp.status_code != 200:
+        return jsonify({"status": "error", "message": "Token exchange falhou"}), 500
+
+    _save_codex_auth(token_resp.json())
+
+    config = _read_config()
+    config["active_provider"] = "openai"
+    _write_config(config)
+
+    session.pop("openai_device_auth_id", None)
+    session.pop("openai_device_user_code", None)
+
+    return jsonify({"status": "authorized"})
+
+
+@bp.route("/api/providers/openai/status")
+@login_required
+def openai_status():
+    """Check if Codex OAuth token exists and is valid."""
+    if not CODEX_AUTH_FILE.is_file():
+        return jsonify({"authenticated": False, "method": "none"})
+
+    try:
+        auth = json.loads(CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+        # Support both new format (auth_mode+tokens) and old format (openai-codex)
+        tokens = auth.get("tokens", {})
+        has_access = bool(tokens.get("access_token") or auth.get("openai-codex", {}).get("access"))
+        return jsonify({
+            "authenticated": has_access,
+            "method": "codex_oauth",
+            "auth_mode": auth.get("auth_mode", "unknown"),
+        })
+    except (json.JSONDecodeError, OSError):
+        return jsonify({"authenticated": False, "method": "none"})
+
+
+@bp.route("/api/providers/openai/logout", methods=["POST"])
+@login_required
+def openai_logout():
+    """Remove Codex auth.json and reset provider."""
+    if CODEX_AUTH_FILE.is_file():
+        CODEX_AUTH_FILE.unlink()
+    config = _read_config()
+    config["active_provider"] = "anthropic"
+    _write_config(config)
+    return jsonify({"status": "ok"})
