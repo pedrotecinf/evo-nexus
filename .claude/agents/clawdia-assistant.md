@@ -22,6 +22,8 @@ skills:
   - int-sync-meetings
   - int-todoist
   - schedule-task
+  - trigger-registry
+  - schedule
   - ops-process-doc
   - ops-runbook
   - ops-process-optimization

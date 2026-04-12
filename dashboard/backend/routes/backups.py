@@ -16,6 +16,43 @@ BACKUPS_DIR = WORKSPACE / "backups"
 _running_jobs = {}
 
 
+def _post_restore_migrate():
+    """Run schema fixes after restoring a backup (old DBs may have missing columns/bad data)."""
+    import sqlite3
+    from flask import current_app
+
+    db_path = current_app.config["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", "")
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    # Ensure all tables exist (db.create_all equivalent for new models)
+    from models import db as _db
+    _db.create_all()
+
+    # Add missing columns
+    existing = {row[1] for row in cur.execute("PRAGMA table_info(roles)").fetchall()}
+    if "agent_access_json" not in existing:
+        cur.execute("ALTER TABLE roles ADD COLUMN agent_access_json TEXT DEFAULT '{\"mode\": \"all\"}'")
+
+    # Fix corrupted datetime columns (NULL or non-string crash SQLAlchemy)
+    for tbl, col in [("roles", "created_at"), ("users", "created_at"), ("users", "last_login")]:
+        try:
+            tbl_cols = {row[1] for row in cur.execute(f"PRAGMA table_info({tbl})").fetchall()}
+            if col in tbl_cols:
+                cur.execute(f"UPDATE {tbl} SET {col} = datetime('now') WHERE {col} IS NOT NULL AND typeof({col}) != 'text'")
+                cur.execute(f"UPDATE {tbl} SET {col} = datetime('now') WHERE {col} IS NOT NULL AND {col} != '' AND {col} NOT LIKE '____-__-__%'")
+        except Exception:
+            pass
+
+    conn.commit()
+    conn.close()
+
+    # Re-seed roles to ensure new permissions exist
+    from models import seed_roles, seed_systems
+    seed_roles()
+    seed_systems()
+
+
 def _require(resource: str, action: str):
     if not has_permission(current_user.role, resource, action):
         return jsonify({"error": "Forbidden"}), 403
@@ -71,7 +108,10 @@ def create_backup():
             import sys
             sys.path.insert(0, str(WORKSPACE))
             import backup as backup_module
-            backup_module.backup_local(s3_upload=s3_upload)
+            zip_path = backup_module.backup_local(s3_upload=s3_upload)
+            # S3 mode: remove local copy after successful upload
+            if s3_upload and zip_path and zip_path.exists():
+                zip_path.unlink(missing_ok=True)
             _running_jobs["backup"] = {"status": "done"}
         except Exception as e:
             _running_jobs["backup"] = {"status": "error", "error": str(e)}
@@ -116,6 +156,11 @@ def restore_backup(filename):
             sys.path.insert(0, str(WORKSPACE))
             import backup as backup_module
             backup_module.restore_local(zip_path, mode=mode)
+
+            # After restore, run auto-migrate to fix schema differences
+            # (old backups may have missing columns or corrupted data)
+            _post_restore_migrate()
+
             _running_jobs["restore"] = {"status": "done", "mode": mode}
         except Exception as e:
             _running_jobs["restore"] = {"status": "error", "error": str(e)}

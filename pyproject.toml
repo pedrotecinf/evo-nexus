@@ -1,6 +1,6 @@
 [project]
 name = "evo-nexus"
-version = "0.18.4"
+version = "0.18.5"
 description = "Unofficial open source toolkit for Claude Code — AI-powered business operating system"
 requires-python = ">=3.10"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.31",
     "pyyaml>=6.0",
     "flask-sock>=0.7",
+    "boto3>=1.35",
     "pywinpty>=3.0.3; sys_platform == 'win32'",
 ]
 

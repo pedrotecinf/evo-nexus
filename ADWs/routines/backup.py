@@ -11,20 +11,30 @@ import backup as backup_module
 
 
 def _do_backup():
-    """Run backup and return structured result for runner."""
+    """Run backup and return structured result for runner.
+
+    If S3 is configured: backup to S3 only, remove local ZIP after upload.
+    If S3 is not configured: backup to local only (fallback).
+    """
     files = backup_module.collect_files()
     if not files:
         return {"ok": True, "summary": "No files to backup"}
 
-    # Check if S3 is configured
     s3_bucket = os.environ.get("BACKUP_S3_BUCKET")
-    s3_upload = bool(s3_bucket)
 
-    zip_path = backup_module.backup_local(s3_upload=s3_upload)
-    zip_size = zip_path.stat().st_size
-    size_str = backup_module._format_size(zip_size)
-    target = f"local + s3://{s3_bucket}" if s3_upload else "local"
-    return {"ok": True, "summary": f"{len(files)} files → {zip_path.name} ({size_str}) [{target}]"}
+    if s3_bucket:
+        # S3 mode: create local ZIP, upload to S3, then delete local copy
+        zip_path = backup_module.backup_local(s3_upload=True)
+        zip_size = zip_path.stat().st_size
+        size_str = backup_module._format_size(zip_size)
+        zip_path.unlink(missing_ok=True)
+        return {"ok": True, "summary": f"{len(files)} files → s3://{s3_bucket}/{zip_path.name} ({size_str})"}
+    else:
+        # Local fallback
+        zip_path = backup_module.backup_local(s3_upload=False)
+        zip_size = zip_path.stat().st_size
+        size_str = backup_module._format_size(zip_size)
+        return {"ok": True, "summary": f"{len(files)} files → {zip_path.name} ({size_str}) [local]"}
 
 
 def main():

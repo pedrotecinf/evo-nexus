@@ -251,7 +251,60 @@ def backup_local(s3_upload: bool = False, s3_bucket: str = None) -> Path:
     if s3_upload:
         backup_s3_upload(zip_path, s3_bucket)
 
+    # Auto-cleanup old backups based on retention settings
+    cleanup_old_backups(s3_bucket=s3_bucket)
+
     return zip_path
+
+
+# ── Cleanup ─────────────────────────────────────────
+
+
+def cleanup_old_backups(s3_bucket: str = None):
+    """Remove old backups beyond retention limits (BACKUP_RETAIN_LOCAL, BACKUP_RETAIN_S3)."""
+
+    # Local cleanup
+    retain_local = os.environ.get("BACKUP_RETAIN_LOCAL", "").strip()
+    if retain_local and retain_local.isdigit() and int(retain_local) > 0:
+        limit = int(retain_local)
+        if BACKUPS_DIR.exists():
+            zips = sorted(BACKUPS_DIR.glob("evonexus-backup-*.zip"), reverse=True)
+            to_delete = zips[limit:]
+            for z in to_delete:
+                z.unlink(missing_ok=True)
+            if to_delete:
+                msg = f"  Cleaned {len(to_delete)} old local backup(s) (keeping {limit})"
+                if HAS_RICH:
+                    console.print(f"  [dim]{msg}[/]")
+                else:
+                    print(f"  {DIM}{msg}{RESET}")
+
+    # S3 cleanup
+    retain_s3 = os.environ.get("BACKUP_RETAIN_S3", "").strip()
+    bucket = s3_bucket or os.environ.get("BACKUP_S3_BUCKET", "")
+    if retain_s3 and retain_s3.isdigit() and int(retain_s3) > 0 and bucket:
+        limit = int(retain_s3)
+        try:
+            import boto3
+            endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+            s3 = boto3.client("s3", endpoint_url=endpoint_url) if endpoint_url else boto3.client("s3")
+            prefix = os.environ.get("BACKUP_S3_PREFIX", "evonexus-backups/")
+            if not prefix.endswith("/"):
+                prefix += "/"
+            resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+            objects = [o for o in resp.get("Contents", []) if o["Key"].endswith(".zip")]
+            objects.sort(key=lambda o: o["LastModified"], reverse=True)
+            to_delete = objects[limit:]
+            for obj in to_delete:
+                s3.delete_object(Bucket=bucket, Key=obj["Key"])
+            if to_delete:
+                msg = f"  Cleaned {len(to_delete)} old S3 backup(s) (keeping {limit})"
+                if HAS_RICH:
+                    console.print(f"  [dim]{msg}[/]")
+                else:
+                    print(f"  {DIM}{msg}{RESET}")
+        except Exception as e:
+            print(f"  {YELLOW}S3 cleanup skipped: {e}{RESET}")
 
 
 # ── Restore ──────────────────────────────────────
@@ -521,7 +574,11 @@ Examples:
 
     if args.command == "backup":
         s3_upload = args.target == "s3"
-        backup_local(s3_upload=s3_upload, s3_bucket=args.s3_bucket)
+        zip_path = backup_local(s3_upload=s3_upload, s3_bucket=args.s3_bucket)
+        # S3 mode: remove local copy after successful upload
+        if s3_upload and zip_path and zip_path.exists():
+            zip_path.unlink(missing_ok=True)
+            print(f"  {GREEN}✓ Local copy removed (S3 only){RESET}")
 
     elif args.command == "restore":
         if args.target == "s3":

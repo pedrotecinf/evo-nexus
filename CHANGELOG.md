@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.5] - 2026-04-12
+
+### Added
+
+- **Backup retention & auto-cleanup** — configurable via `BACKUP_RETAIN_LOCAL` and `BACKUP_RETAIN_S3` env vars (also editable in dashboard Storage Provider panel). Old backups beyond the limit are auto-deleted after each backup run
+- **`boto3` as default dependency** — included in `pyproject.toml` so new installs have S3 support out of the box
+- **`trigger-registry` and `schedule` skills** — added to Oracle and Clawdia agents so they can create/manage webhook triggers and scheduled tasks
+
+### Changed
+
+- **S3 backup is now S3-only** — when S3 is configured, daily routine and `make backup-s3` upload to S3 and delete the local copy. Local backup is fallback only when S3 is not configured
+- **Dashboard restore runs post-migrate** — restore via the web UI now auto-fixes schema differences (missing columns, corrupted datetimes) after extracting, preventing 500 errors from old backups
+
 ## [0.18.4] - 2026-04-12
 
 ### Changed

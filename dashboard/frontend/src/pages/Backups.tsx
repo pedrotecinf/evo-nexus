@@ -51,6 +51,8 @@ const S3_FIELDS = [
   { envKey: 'AWS_DEFAULT_REGION', label: 'Region', hint: 'ex: us-east-1, sa-east-1, auto', required: false, sensitive: false },
   { envKey: 'AWS_ENDPOINT_URL', label: 'Endpoint URL', hint: 'Para R2, Backblaze, MinIO (ex: https://xxx.r2.cloudflarestorage.com)', required: false, sensitive: false },
   { envKey: 'BACKUP_S3_PREFIX', label: 'Prefix', hint: 'Prefixo das chaves no bucket (ex: backups/evonexus/)', required: false, sensitive: false },
+  { envKey: 'BACKUP_RETAIN_LOCAL', label: 'Retenção local', hint: 'Backups locais a manter (ex: 7). Vazio = sem limite', required: false, sensitive: false },
+  { envKey: 'BACKUP_RETAIN_S3', label: 'Retenção S3', hint: 'Backups no S3 a manter (ex: 30). Vazio = sem limite', required: false, sensitive: false },
 ]
 
 function S3ConfigPanel({ config, onSaved }: { config: BackupConfig; onSaved: () => void }) {

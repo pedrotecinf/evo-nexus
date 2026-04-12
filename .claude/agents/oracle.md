@@ -20,6 +20,8 @@ skills:
   - create-agent
   - create-command
   - create-routine
+  - trigger-registry
+  - schedule
   - workspace-share
 ---
 
