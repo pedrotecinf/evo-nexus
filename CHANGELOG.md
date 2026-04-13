@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-04-13
+
+### Added
+
+- **Chat UI for agents** — new chat mode alongside the terminal on every agent page. Uses the Agent SDK (`query()`) with structured streaming: text deltas, tool use cards, thinking indicator. Messages persist across page refreshes via server-side `chatHistory` stored in session-store
+- **Chat session management** — sidebar "Sessions" tab shows all conversations for an agent with preview of last message, sorted by most recent. Create new sessions, switch between them. Each session maintains its own SDK conversation context
+- **Agent identity in chat** — chat mode loads the agent's `.claude/agents/{name}.md` system prompt via `systemPrompt.append` on the Claude Code preset, so agents (Oracle, Clawdia, etc.) respond in character
+- **File attachments in chat** — attach images via paperclip button or drag-and-drop. Files are base64-encoded, saved to temp dir on server, and referenced in the prompt so the agent can `Read` them
+- **Restart All button** — Scheduler page now has a "Restart All" button that triggers `systemctl restart evo-nexus` via a new `/api/services/restart-all` endpoint (systemd deployments only)
+
+### Fixed
+
+- **Chat event routing** — fixed duplicate `type` key bug in server.js where `{ type: 'chat_event', ...msg }` spread overwrote the envelope type with the inner message type, causing the frontend to silently drop all chat events
+- **Session persistence** — `chatHistory` and `sdkSessionId` are now included in session-store serialization/deserialization so chat conversations survive server restarts
+
 ## [0.18.8] - 2026-04-13
 
 ### Added

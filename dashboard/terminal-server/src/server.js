@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const ClaudeBridge = require('./claude-bridge');
+const { ChatBridge } = require('./chat-bridge');
 const SessionStore = require('./utils/session-store');
 
 class TerminalServer {
@@ -17,6 +18,7 @@ class TerminalServer {
     this.claudeSessions = new Map();
     this.webSocketConnections = new Map();
     this.claudeBridge = new ClaudeBridge();
+    this.chatBridge = new ChatBridge();
     this.sessionStore = new SessionStore();
     this.autoSaveInterval = null;
     this.isShuttingDown = false;
@@ -168,16 +170,35 @@ class TerminalServer {
       const sessions = [];
       for (const [id, s] of this.claudeSessions.entries()) {
         if (s.agentName === agentName) {
+          // Build preview and find last message timestamp
+          let preview = '';
+          let lastMessageTs = 0;
+          if (Array.isArray(s.chatHistory) && s.chatHistory.length > 0) {
+            // Last message timestamp for sorting
+            const lastMsg = s.chatHistory[s.chatHistory.length - 1];
+            lastMessageTs = lastMsg.ts || 0;
+            // Preview from last user message
+            for (let i = s.chatHistory.length - 1; i >= 0; i--) {
+              if (s.chatHistory[i].role === 'user' && s.chatHistory[i].text) {
+                preview = s.chatHistory[i].text.slice(0, 80);
+                break;
+              }
+            }
+          }
           sessions.push({
             id,
             name: s.name,
             created: s.created,
             active: s.active,
             agentName: s.agentName,
-            lastActivity: s.lastActivity,
+            lastActivity: lastMessageTs || (s.lastActivity ? new Date(s.lastActivity).getTime() : 0),
+            preview,
+            messageCount: Array.isArray(s.chatHistory) ? s.chatHistory.length : 0,
           });
         }
       }
+      // Sort by lastActivity descending (most recent first)
+      sessions.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
       res.json({ sessions });
     });
 
@@ -266,6 +287,8 @@ class TerminalServer {
       this.saveSessionsToDisk();
       res.json({ success: true, message: 'Session deleted' });
     });
+
+    // Chat mode is handled via WebSocket (chat_send / chat_stop messages)
   }
 
   async start() {
@@ -292,6 +315,14 @@ class TerminalServer {
 
     const wsInfo = { id: wsId, ws, claudeSessionId: null, created: new Date() };
     this.webSocketConnections.set(wsId, wsInfo);
+
+    // Send pending chat history if session is in chat mode
+    if (claudeSessionId) {
+      const sess = this.claudeSessions.get(claudeSessionId);
+      if (sess?.chatHistory?.length > 0) {
+        this.sendToWebSocket(ws, { type: 'chat_history', messages: sess.chatHistory });
+      }
+    }
 
     ws.on('message', async (message) => {
       try {
@@ -354,6 +385,124 @@ class TerminalServer {
         }
         break;
 
+      case 'chat_send':
+        // Send a chat message via Agent SDK
+        if (wsInfo.claudeSessionId) {
+          const chatSession = this.claudeSessions.get(wsInfo.claudeSessionId);
+          if (chatSession && data.prompt) {
+            chatSession.mode = 'chat';
+            chatSession.active = true;
+            chatSession.lastActivity = new Date();
+            if (!chatSession.chatHistory) chatSession.chatHistory = [];
+
+            // Store user message in history
+            const userMsg = {
+              role: 'user',
+              text: data.prompt,
+              files: data.files || undefined,
+              ts: Date.now(),
+            };
+            chatSession.chatHistory.push(userMsg);
+
+            // Accumulate assistant response for history
+            let assistantBlocks = [];
+            let isStreaming = false;
+
+            try {
+              await this.chatBridge.startSession(wsInfo.claudeSessionId, {
+                agentName: chatSession.agentName,
+                workingDir: chatSession.workingDir,
+                prompt: data.prompt,
+                files: data.files,
+                sdkSessionId: chatSession.sdkSessionId || undefined,
+                onMessage: (msg) => {
+                  // Track SDK session ID
+                  if (msg.type === 'session_id' && msg.sdkSessionId) {
+                    chatSession.sdkSessionId = msg.sdkSessionId;
+                    return; // Don't forward internal event
+                  }
+
+                  // Build assistant blocks for history
+                  if (msg.type === 'text_start' || msg.type === 'message_start') {
+                    if (!isStreaming) {
+                      isStreaming = true;
+                      assistantBlocks = [];
+                    }
+                  }
+                  if (msg.type === 'text_delta') {
+                    const last = assistantBlocks[assistantBlocks.length - 1];
+                    if (last?.type === 'text') {
+                      last.text += msg.text || '';
+                    } else {
+                      assistantBlocks.push({ type: 'text', text: msg.text || '' });
+                    }
+                  }
+                  if (msg.type === 'tool_use_start') {
+                    assistantBlocks.push({
+                      type: 'tool_use',
+                      toolName: msg.toolName,
+                      toolId: msg.toolId,
+                      input: '',
+                      done: false,
+                    });
+                  }
+                  if (msg.type === 'tool_input_delta') {
+                    const last = assistantBlocks[assistantBlocks.length - 1];
+                    if (last?.type === 'tool_use') {
+                      last.input += msg.json || '';
+                    }
+                  }
+                  if (msg.type === 'block_stop') {
+                    const last = assistantBlocks[assistantBlocks.length - 1];
+                    if (last?.type === 'tool_use') last.done = true;
+                  }
+
+                  // Also broadcast the current assistant blocks for live history
+                  this.broadcastToSession(wsInfo.claudeSessionId, { type: 'chat_event', event: msg });
+                },
+                onError: (err) => {
+                  chatSession.active = false;
+                  this.broadcastToSession(wsInfo.claudeSessionId, {
+                    type: 'chat_error',
+                    message: err.message || 'Unknown error',
+                  });
+                },
+                onComplete: (info) => {
+                  chatSession.active = false;
+                  // Store SDK session ID for future resume
+                  if (info?.sdkSessionId) {
+                    chatSession.sdkSessionId = info.sdkSessionId;
+                  }
+                  // Save assistant message to history
+                  if (assistantBlocks.length > 0) {
+                    chatSession.chatHistory.push({
+                      role: 'assistant',
+                      blocks: assistantBlocks,
+                      ts: Date.now(),
+                      streaming: false,
+                    });
+                  }
+                  this.saveSessionsToDisk();
+                  this.broadcastToSession(wsInfo.claudeSessionId, { type: 'chat_complete' });
+                },
+              });
+            } catch (err) {
+              console.error('[chat_send] Error starting chat session:', err);
+              chatSession.active = false;
+              this.sendToWebSocket(wsInfo.ws, { type: 'chat_error', message: err.message || String(err) });
+            }
+          }
+        }
+        break;
+
+      case 'chat_stop':
+        if (wsInfo.claudeSessionId) {
+          await this.chatBridge.stopSession(wsInfo.claudeSessionId);
+          const s = this.claudeSessions.get(wsInfo.claudeSessionId);
+          if (s) s.active = false;
+        }
+        break;
+
       case 'resize':
         if (wsInfo.claudeSessionId) {
           const session = this.claudeSessions.get(wsInfo.claudeSessionId);
@@ -406,6 +555,7 @@ class TerminalServer {
       workingDir: session.workingDir,
       active: session.active,
       outputBuffer: session.outputBuffer.slice(-200),
+      chatHistory: session.chatHistory || [],
     });
 
     if (this.dev) console.log(`WebSocket ${wsId} joined session ${claudeSessionId}`);

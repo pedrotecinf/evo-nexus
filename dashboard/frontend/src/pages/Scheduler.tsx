@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Play, Square, RefreshCw, Terminal, X, Clock } from 'lucide-react'
+import { Play, Square, RefreshCw, Terminal, X, Clock, RotateCcw } from 'lucide-react'
 import { api } from '../lib/api'
 import StatusDot from '../components/StatusDot'
 
@@ -92,6 +92,23 @@ export default function Scheduler() {
 
   useEffect(() => { fetchData() }, [])
 
+  const [restarting, setRestarting] = useState(false)
+
+  const handleRestartAll = async () => {
+    if (!confirm('Restart EvoNexus? Dashboard, scheduler, and terminal-server will restart.')) return
+    setRestarting(true)
+    try {
+      await api.post('/services/restart-all')
+      // Wait for service to come back
+      setTimeout(() => {
+        window.location.reload()
+      }, 5000)
+    } catch (e: any) {
+      alert(e?.message || 'Failed to restart. Is the systemd service installed?')
+      setRestarting(false)
+    }
+  }
+
   const handleAction = async (serviceId: string, action: 'start' | 'stop') => {
     setActionLoading(serviceId)
     try {
@@ -167,12 +184,26 @@ export default function Scheduler() {
             <p className="text-[#667085] mt-0.5 text-sm">Background services and scheduled routines</p>
           </div>
         </div>
-        <button
-          onClick={() => { setLoading(true); fetchData() }}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#21262d] bg-[#161b22] text-[#667085] hover:text-[#00FFA7] hover:border-[#00FFA7]/30 transition-colors"
-        >
-          <RefreshCw size={16} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRestartAll}
+            disabled={restarting}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+              restarting
+                ? 'border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B]'
+                : 'border-[#21262d] bg-[#161b22] text-[#667085] hover:text-[#F59E0B] hover:border-[#F59E0B]/30'
+            }`}
+          >
+            <RotateCcw size={16} className={restarting ? 'animate-spin' : ''} />
+            {restarting ? 'Restarting...' : 'Restart All'}
+          </button>
+          <button
+            onClick={() => { setLoading(true); fetchData() }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#21262d] bg-[#161b22] text-[#667085] hover:text-[#00FFA7] hover:border-[#00FFA7]/30 transition-colors"
+          >
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Service Card renderer */}

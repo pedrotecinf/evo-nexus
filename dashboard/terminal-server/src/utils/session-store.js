@@ -36,6 +36,10 @@ class SessionStore {
                 outputBuffer: Array.isArray(session.outputBuffer) ? session.outputBuffer.slice(-100) : [], // Keep last 100 lines
                 connections: [], // Clear connections (they won't persist)
                 lastAccessed: session.lastAccessed || Date.now(),
+                // Chat mode data
+                mode: session.mode || null,
+                chatHistory: Array.isArray(session.chatHistory) ? session.chatHistory.slice(-50) : [], // Keep last 50 messages
+                sdkSessionId: session.sdkSessionId || null,
                 // Session-specific usage tracking
                 sessionStartTime: session.sessionStartTime || null,
                 sessionUsage: session.sessionUsage || {
@@ -127,6 +131,10 @@ class SessionStore {
                     connections: new Set(),
                     outputBuffer: session.outputBuffer || [],
                     maxBufferSize: 1000,
+                    // Restore chat data
+                    chatHistory: session.chatHistory || [],
+                    sdkSessionId: session.sdkSessionId || null,
+                    mode: session.mode || null,
                     // Restore usage data if available
                     usageData: session.usageData || null
                 });

@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, ChevronRight, PanelLeft, X, Lock, Plus, Terminal as TerminalIcon } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, PanelLeft, X, Lock, Plus, Terminal as TerminalIcon, MessageSquare } from 'lucide-react'
 import { api } from '../lib/api'
 import Markdown from '../components/Markdown'
 import AgentTerminal from '../components/AgentTerminal'
+import AgentChat from '../components/AgentChat'
+import ChatSessionList, { type ChatSession } from '../components/ChatSessionList'
 import { getAgentMeta } from '../lib/agent-meta'
 import { trackAgentVisit } from './Agents'
 import { AgentAvatar } from '../components/AgentAvatar'
@@ -15,7 +17,7 @@ interface MemoryFile {
   size: number
 }
 
-type Tab = 'profile' | 'memory'
+type Tab = 'sessions' | 'profile' | 'memory'
 
 // Terminal-server URL (same logic as AgentTerminal)
 const isLocal = import.meta.env.DEV || /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
@@ -50,13 +52,23 @@ export default function AgentDetail() {
   const [memoryContents, setMemoryContents] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [expandedMemory, setExpandedMemory] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('profile')
+  const [tab, setTab] = useState<Tab>('sessions')
   const [railOpen, setRailOpen] = useState(false) // mobile drawer
+
+  // View mode: terminal or chat
+  type ViewMode = 'terminal' | 'chat'
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try { return (localStorage.getItem('evo:agent-view-mode') as ViewMode) || 'terminal' } catch { return 'terminal' }
+  })
 
   // Multi-terminal tabs
   const [termTabs, setTermTabs] = useState<TerminalTab[]>([])
   const [activeTermTab, setActiveTermTab] = useState<string | null>(null)
   const [, setTermTabsLoading] = useState(true)
+
+  // Chat sessions
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
+  const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null)
 
   // Track agent visit for "Recent" section
   useEffect(() => {
@@ -125,6 +137,85 @@ export default function AgentDetail() {
       setActiveTermTab(data.sessionId)
     } catch {}
   }, [name, termTabs, activeTermTab])
+
+  // Load chat sessions for this agent
+  const loadChatSessions = useCallback(async () => {
+    if (!name) return
+    try {
+      const res = await fetch(`${TS_HTTP}/api/sessions/by-agent/${name}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const sessions: ChatSession[] = (data.sessions || []).map((s: any) => ({
+        id: s.id,
+        name: s.name || name,
+        active: s.active,
+        preview: s.preview || undefined,
+        ts: typeof s.lastActivity === 'number' ? s.lastActivity : (s.lastActivity ? new Date(s.lastActivity).getTime() : undefined),
+      }))
+      setChatSessions(sessions)
+      // Auto-select first session only if none active
+      setActiveChatSessionId(prev => {
+        if (prev && sessions.some(s => s.id === prev)) return prev
+        return sessions.length > 0 ? sessions[0].id : null
+      })
+    } catch {}
+  }, [name])
+
+  useEffect(() => {
+    if (viewMode === 'chat') loadChatSessions()
+  }, [viewMode, name])
+
+  const createNewChatSession = useCallback(async () => {
+    if (!name) return
+    try {
+      const res = await fetch(`${TS_HTTP}/api/sessions/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentName: name }),
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const newSession: ChatSession = {
+        id: data.sessionId,
+        name: data.session?.name || `${name} #${chatSessions.length + 1}`,
+        active: false,
+        ts: Date.now(),
+      }
+      setChatSessions(prev => [newSession, ...prev])
+      setActiveChatSessionId(data.sessionId)
+    } catch {}
+  }, [name, chatSessions])
+
+  const selectChatSession = useCallback((id: string) => {
+    setActiveChatSessionId(id)
+    // Reload sessions list to get fresh previews and order
+    loadChatSessions()
+  }, [loadChatSessions])
+
+  // Auto-create a chat session when switching to chat mode if none exist
+  useEffect(() => {
+    if (viewMode === 'chat' && chatSessions.length === 0 && name) {
+      // Find-or-create via the for-agent endpoint
+      fetch(`${TS_HTTP}/api/sessions/for-agent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentName: name }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return
+          const session: ChatSession = {
+            id: data.sessionId,
+            name: data.session?.name || name,
+            active: data.session?.active ?? false,
+            ts: Date.now(),
+          }
+          setChatSessions([session])
+          setActiveChatSessionId(data.sessionId)
+        })
+        .catch(() => {})
+    }
+  }, [viewMode, chatSessions.length, name])
 
   const closeTerminalTab = useCallback(async (sessionId: string) => {
     // Stop and delete session
@@ -284,6 +375,10 @@ export default function AgentDetail() {
             memoryContents={memoryContents}
             toggleMemory={toggleMemory}
             agentSlug={name}
+            chatSessions={chatSessions}
+            activeChatSessionId={activeChatSessionId}
+            onSelectChatSession={selectChatSession}
+            onNewChatSession={createNewChatSession}
           />
         </aside>
 
@@ -320,12 +415,16 @@ export default function AgentDetail() {
                 memoryContents={memoryContents}
                 toggleMemory={toggleMemory}
                 agentSlug={name}
+                chatSessions={chatSessions}
+                activeChatSessionId={activeChatSessionId}
+                onSelectChatSession={selectChatSession}
+                onNewChatSession={createNewChatSession}
               />
             </aside>
           </div>
         )}
 
-        {/* Terminal stage */}
+        {/* Terminal / Chat stage */}
         <section className="flex-1 min-w-0 relative bg-[#0C111D] overflow-hidden flex flex-col">
           {/* Ambient glow */}
           <div
@@ -336,68 +435,89 @@ export default function AgentDetail() {
             }}
           />
 
-          {/* Terminal tabs bar — only show when there are multiple tabs */}
-          {termTabs.length > 1 && (
-            <div className="relative z-10 flex items-center flex-shrink-0 h-9 border-b border-[#21262d] bg-[#0d1117] overflow-x-auto">
-              {termTabs.map((tt) => (
-                <div
-                  key={tt.id}
-                  className={`group flex items-center gap-2 px-3 h-full text-[11px] cursor-pointer border-r border-[#21262d] transition-colors ${
-                    activeTermTab === tt.id
-                      ? 'bg-[#0C111D] text-[#e6edf3]'
-                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
-                  }`}
-                  onClick={() => setActiveTermTab(tt.id)}
-                >
-                  <TerminalIcon size={11} style={{ color: activeTermTab === tt.id ? agentColor : undefined }} />
-                  <span className="truncate max-w-[120px]">{tt.name}</span>
-                  {tt.active && (
-                    <span
-                      className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: agentColor, boxShadow: `0 0 4px ${agentColor}88` }}
-                    />
-                  )}
-                  {termTabs.length > 1 && (
+          {/* View mode bar + terminal tabs */}
+          <div className="relative z-10 flex items-center flex-shrink-0 h-9 border-b border-[#21262d] bg-[#0d1117]">
+            {/* View mode toggle */}
+            <div className="flex items-center border-r border-[#21262d] h-full">
+              <button
+                onClick={() => { setViewMode('chat'); localStorage.setItem('evo:agent-view-mode', 'chat') }}
+                className={`flex items-center gap-1.5 px-3 h-full text-[11px] transition-colors ${
+                  viewMode === 'chat'
+                    ? 'text-[#e6edf3] bg-[#0C111D]'
+                    : 'text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22]'
+                }`}
+              >
+                <MessageSquare size={12} style={{ color: viewMode === 'chat' ? agentColor : undefined }} />
+                Chat
+              </button>
+              <button
+                onClick={() => { setViewMode('terminal'); localStorage.setItem('evo:agent-view-mode', 'terminal') }}
+                className={`flex items-center gap-1.5 px-3 h-full text-[11px] transition-colors ${
+                  viewMode === 'terminal'
+                    ? 'text-[#e6edf3] bg-[#0C111D]'
+                    : 'text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22]'
+                }`}
+              >
+                <TerminalIcon size={12} style={{ color: viewMode === 'terminal' ? agentColor : undefined }} />
+                Terminal
+              </button>
+            </div>
+
+            {/* Terminal tabs — only in terminal mode with multiple tabs */}
+            {viewMode === 'terminal' && (
+              <div className="flex items-center flex-1 h-full overflow-x-auto">
+                {termTabs.length > 1 && termTabs.map((tt) => (
+                  <div
+                    key={tt.id}
+                    className={`group flex items-center gap-2 px-3 h-full text-[11px] cursor-pointer border-r border-[#21262d] transition-colors ${
+                      activeTermTab === tt.id
+                        ? 'bg-[#0C111D] text-[#e6edf3]'
+                        : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
+                    }`}
+                    onClick={() => setActiveTermTab(tt.id)}
+                  >
+                    <TerminalIcon size={11} style={{ color: activeTermTab === tt.id ? agentColor : undefined }} />
+                    <span className="truncate max-w-[120px]">{tt.name}</span>
+                    {tt.active && (
+                      <span
+                        className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: agentColor, boxShadow: `0 0 4px ${agentColor}88` }}
+                      />
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); closeTerminalTab(tt.id) }}
                       className="opacity-0 group-hover:opacity-100 text-[#667085] hover:text-[#ef4444] transition-opacity"
                     >
                       <X size={11} />
                     </button>
-                  )}
-                </div>
-              ))}
-              {/* New tab button */}
-              <button
-                onClick={createNewTerminal}
-                className="flex items-center justify-center h-full px-2.5 text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22] transition-colors"
-                title="New terminal"
-              >
-                <Plus size={13} />
-              </button>
-            </div>
-          )}
+                  </div>
+                ))}
+                <button
+                  onClick={createNewTerminal}
+                  className="flex items-center justify-center h-full px-2.5 text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22] transition-colors"
+                  title="New terminal"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+            )}
+          </div>
 
-          {/* Single "+" button when only one tab (or none) — show as floating button */}
-          {termTabs.length <= 1 && (
-            <button
-              onClick={createNewTerminal}
-              className="absolute top-1.5 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[#667085] hover:text-[#e6edf3] bg-[#0d1117]/80 hover:bg-[#161b22] border border-[#21262d] transition-colors"
-              title="New terminal"
-            >
-              <Plus size={11} />
-              <span className="hidden sm:inline">New</span>
-            </button>
-          )}
-
-          {/* Terminal content */}
+          {/* Content */}
           <div className="relative z-10 flex-1 min-h-0">
-            {termTabs.length === 0 || activeTermTab === null ? (
-              // Default mode — single terminal, no explicit sessionId
-              <AgentTerminal key={`default-${name}`} agent={name} accentColor={agentColor} />
+            {viewMode === 'chat' ? (
+              <AgentChat
+                key={`chat-${name}-${activeChatSessionId || 'default'}`}
+                agent={name}
+                sessionId={activeChatSessionId || undefined}
+                accentColor={agentColor}
+              />
             ) : (
-              // Multi-tab mode — render the active session
-              <AgentTerminal key={activeTermTab} agent={name} sessionId={activeTermTab} accentColor={agentColor} />
+              termTabs.length === 0 || activeTermTab === null ? (
+                <AgentTerminal key={`default-${name}`} agent={name} accentColor={agentColor} />
+              ) : (
+                <AgentTerminal key={activeTermTab} agent={name} sessionId={activeTermTab} accentColor={agentColor} />
+              )
             )}
           </div>
         </section>
@@ -419,6 +539,10 @@ interface InfoRailProps {
   memoryContents: Record<string, string>
   toggleMemory: (name: string) => void
   agentSlug: string
+  chatSessions: ChatSession[]
+  activeChatSessionId: string | null
+  onSelectChatSession: (id: string) => void
+  onNewChatSession: () => void
 }
 
 function InfoRail({
@@ -432,11 +556,22 @@ function InfoRail({
   memoryContents,
   toggleMemory,
   agentSlug,
+  chatSessions,
+  activeChatSessionId,
+  onSelectChatSession,
+  onNewChatSession,
 }: InfoRailProps) {
   return (
     <>
       {/* Tab bar */}
       <div className="flex-shrink-0 flex items-center h-10 px-5 gap-6 border-b border-[#21262d]">
+        <TabButton
+          label="Sessions"
+          active={tab === 'sessions'}
+          onClick={() => setTab('sessions')}
+          color={agentColor}
+          count={chatSessions.length}
+        />
         <TabButton label="Profile" active={tab === 'profile'} onClick={() => setTab('profile')} color={agentColor} />
         <TabButton
           label="Memory"
@@ -448,9 +583,19 @@ function InfoRail({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {tab === 'sessions' && (
+          <ChatSessionList
+            sessions={chatSessions}
+            activeSessionId={activeChatSessionId}
+            onSelectSession={onSelectChatSession}
+            onNewSession={onNewChatSession}
+            accentColor={agentColor}
+          />
+        )}
+
         {tab === 'profile' && (
-          <div>
+          <div className="px-5 py-4">
             {profileLead && (
               <p className="text-[13px] leading-[1.6] text-[#e6edf3] mb-4 pb-4 border-b border-[#21262d]">
                 {profileLead}
@@ -469,50 +614,53 @@ function InfoRail({
           </div>
         )}
 
-        {tab === 'memory' &&
-          (memories.length === 0 ? (
-            <div className="text-[12px] text-[#667085]">
-              <p className="mb-1">Sem memórias ainda.</p>
-              <p className="text-[11px] text-[#3F3F46]">
-                Adicione arquivos em{' '}
-                <code className="font-mono text-[#667085]">.claude/agent-memory/{agentSlug}/</code>
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-0.5">
-              {memories.map((mem) => {
-                const open = expandedMemory === mem.name
-                return (
-                  <li key={mem.name}>
-                    <button
-                      onClick={() => toggleMemory(mem.name)}
-                      className="w-full flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-[#161b22] text-left transition-colors"
-                    >
-                      {open ? (
-                        <ChevronDown size={11} className="text-[#667085] flex-shrink-0" />
-                      ) : (
-                        <ChevronRight size={11} className="text-[#3F3F46] flex-shrink-0" />
-                      )}
-                      <span className="font-mono text-[11.5px] text-[#e6edf3] truncate">
-                        {mem.name}
-                      </span>
-                      <span className="ml-auto font-mono text-[10px] text-[#667085] flex-shrink-0">
-                        {formatSize(mem.size)}
-                      </span>
-                    </button>
-                    {open && (
-                      <div
-                        className="ml-4 mt-1 mb-2 pl-4 py-1 border-l text-[11.5px] leading-[1.6] text-[#8b949e] overflow-hidden"
-                        style={{ borderColor: `${agentColor}40` }}
+        {tab === 'memory' && (
+          <div className="px-5 py-4">
+            {memories.length === 0 ? (
+              <div className="text-[12px] text-[#667085]">
+                <p className="mb-1">Sem memórias ainda.</p>
+                <p className="text-[11px] text-[#3F3F46]">
+                  Adicione arquivos em{' '}
+                  <code className="font-mono text-[#667085]">.claude/agent-memory/{agentSlug}/</code>
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-0.5">
+                {memories.map((mem) => {
+                  const open = expandedMemory === mem.name
+                  return (
+                    <li key={mem.name}>
+                      <button
+                        onClick={() => toggleMemory(mem.name)}
+                        className="w-full flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-[#161b22] text-left transition-colors"
                       >
-                        <Markdown>{memoryContents[mem.name] || 'Loading...'}</Markdown>
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          ))}
+                        {open ? (
+                          <ChevronDown size={11} className="text-[#667085] flex-shrink-0" />
+                        ) : (
+                          <ChevronRight size={11} className="text-[#3F3F46] flex-shrink-0" />
+                        )}
+                        <span className="font-mono text-[11.5px] text-[#e6edf3] truncate">
+                          {mem.name}
+                        </span>
+                        <span className="ml-auto font-mono text-[10px] text-[#667085] flex-shrink-0">
+                          {formatSize(mem.size)}
+                        </span>
+                      </button>
+                      {open && (
+                        <div
+                          className="ml-4 mt-1 mb-2 pl-4 py-1 border-l text-[11.5px] leading-[1.6] text-[#8b949e] overflow-hidden"
+                          style={{ borderColor: `${agentColor}40` }}
+                        >
+                          <Markdown>{memoryContents[mem.name] || 'Loading...'}</Markdown>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </>
   )

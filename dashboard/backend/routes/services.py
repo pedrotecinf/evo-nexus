@@ -120,6 +120,32 @@ def run_routine(routine_id):
         return jsonify({"error": str(e)}), 500
 
 
+@bp.route("/api/services/restart-all", methods=["POST"])
+def restart_all_services():
+    """Restart the EvoNexus systemd service (dashboard + scheduler + terminal-server).
+    Spawns the restart with a delay so the HTTP response can be sent first."""
+    import shutil
+    if not shutil.which("systemctl"):
+        return jsonify({"error": "systemctl not available (not running as systemd service)"}), 400
+
+    # Check if the service exists
+    result = subprocess.run(
+        ["systemctl", "is-enabled", "evo-nexus"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return jsonify({"error": "evo-nexus service not found. Run: sudo bash install-service.sh"}), 400
+
+    # Spawn restart with delay so this response can be sent
+    subprocess.Popen(
+        ["bash", "-c", "sleep 2 && systemctl restart evo-nexus"],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return jsonify({"status": "restarting", "message": "Service will restart in ~2 seconds"})
+
+
 TELEGRAM_LOG = f"{WORKSPACE_STR}/ADWs/logs/telegram.log"
 SCHEDULER_LOG = f"{WORKSPACE_STR}/ADWs/logs/scheduler.log"
 
