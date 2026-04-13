@@ -162,6 +162,77 @@ class TerminalServer {
       });
     });
 
+    // List all sessions for a given agent
+    this.app.get('/api/sessions/by-agent/:agentName', (req, res) => {
+      const { agentName } = req.params;
+      const sessions = [];
+      for (const [id, s] of this.claudeSessions.entries()) {
+        if (s.agentName === agentName) {
+          sessions.push({
+            id,
+            name: s.name,
+            created: s.created,
+            active: s.active,
+            agentName: s.agentName,
+            lastActivity: s.lastActivity,
+          });
+        }
+      }
+      res.json({ sessions });
+    });
+
+    // Create a NEW session for an agent (always creates, never reuses)
+    this.app.post('/api/sessions/create', (req, res) => {
+      const { agentName, workingDir } = req.body;
+      if (!agentName) {
+        return res.status(400).json({ error: 'agentName is required' });
+      }
+
+      let validWorkingDir = this.baseFolder;
+      if (workingDir) {
+        const validation = this.validatePath(workingDir);
+        if (!validation.valid) {
+          return res.status(403).json({ error: validation.error });
+        }
+        validWorkingDir = validation.path;
+      }
+
+      // Count existing sessions for this agent to number them
+      let count = 0;
+      for (const s of this.claudeSessions.values()) {
+        if (s.agentName === agentName) count++;
+      }
+
+      const sessionId = uuidv4();
+      const session = {
+        id: sessionId,
+        name: `${agentName} #${count + 1}`,
+        created: new Date(),
+        lastActivity: new Date(),
+        active: false,
+        agent: null,
+        agentName,
+        workingDir: validWorkingDir,
+        connections: new Set(),
+        outputBuffer: [],
+        maxBufferSize: 1000,
+      };
+      this.claudeSessions.set(sessionId, session);
+      this.saveSessionsToDisk();
+
+      res.json({
+        success: true,
+        sessionId,
+        session: {
+          id: sessionId,
+          name: session.name,
+          workingDir: session.workingDir,
+          active: false,
+          agentName,
+        },
+      });
+    });
+
     this.app.get('/api/sessions/:sessionId', (req, res) => {
       const session = this.claudeSessions.get(req.params.sessionId);
       if (!session) return res.status(404).json({ error: 'Session not found' });

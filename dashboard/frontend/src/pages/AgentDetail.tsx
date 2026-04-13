@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, ChevronRight, PanelLeft, X, Lock } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, PanelLeft, X, Lock, Plus, Terminal as TerminalIcon } from 'lucide-react'
 import { api } from '../lib/api'
 import Markdown from '../components/Markdown'
 import AgentTerminal from '../components/AgentTerminal'
 import { getAgentMeta } from '../lib/agent-meta'
+import { trackAgentVisit } from './Agents'
 import { AgentAvatar } from '../components/AgentAvatar'
 import { useAuth } from '../context/AuthContext'
 
@@ -15,6 +16,18 @@ interface MemoryFile {
 }
 
 type Tab = 'profile' | 'memory'
+
+// Terminal-server URL (same logic as AgentTerminal)
+const isLocal = import.meta.env.DEV || /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+const TS_HTTP = isLocal
+  ? `http://${window.location.hostname}:32352`
+  : `${window.location.origin}/terminal`
+
+interface TerminalTab {
+  id: string       // sessionId
+  name: string     // display name
+  active: boolean  // is claude running
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}b`
@@ -39,6 +52,93 @@ export default function AgentDetail() {
   const [expandedMemory, setExpandedMemory] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('profile')
   const [railOpen, setRailOpen] = useState(false) // mobile drawer
+
+  // Multi-terminal tabs
+  const [termTabs, setTermTabs] = useState<TerminalTab[]>([])
+  const [activeTermTab, setActiveTermTab] = useState<string | null>(null)
+  const [, setTermTabsLoading] = useState(true)
+
+  // Track agent visit for "Recent" section
+  useEffect(() => {
+    if (name) trackAgentVisit(name)
+  }, [name])
+
+  // Load existing terminal sessions for this agent
+  useEffect(() => {
+    if (!name) return
+    setTermTabsLoading(true)
+    fetch(`${TS_HTTP}/api/sessions/by-agent/${name}`)
+      .then(r => r.ok ? r.json() : { sessions: [] })
+      .then(data => {
+        const sessions: TerminalTab[] = (data.sessions || []).map((s: any) => ({
+          id: s.id,
+          name: s.name || name,
+          active: s.active,
+        }))
+        if (sessions.length === 0) {
+          // No existing sessions — will use default find-or-create (no tab needed yet)
+          setTermTabs([])
+          setActiveTermTab(null)
+        } else {
+          setTermTabs(sessions)
+          setActiveTermTab(sessions[0].id)
+        }
+      })
+      .catch(() => {
+        setTermTabs([])
+        setActiveTermTab(null)
+      })
+      .finally(() => setTermTabsLoading(false))
+  }, [name])
+
+  const createNewTerminal = useCallback(async () => {
+    if (!name) return
+    try {
+      const res = await fetch(`${TS_HTTP}/api/sessions/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentName: name }),
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const newTab: TerminalTab = {
+        id: data.sessionId,
+        name: data.session?.name || `${name} #${termTabs.length + 1}`,
+        active: false,
+      }
+      // If this is the first extra tab, we also need to load the existing default session
+      if (termTabs.length === 0 && activeTermTab === null) {
+        // Fetch existing sessions first to get the default one
+        const existing = await fetch(`${TS_HTTP}/api/sessions/by-agent/${name}`)
+        if (existing.ok) {
+          const existingData = await existing.json()
+          const allSessions: TerminalTab[] = (existingData.sessions || [])
+            .filter((s: any) => s.id !== data.sessionId)
+            .map((s: any) => ({ id: s.id, name: s.name || name, active: s.active }))
+          setTermTabs([...allSessions, newTab])
+        } else {
+          setTermTabs([newTab])
+        }
+      } else {
+        setTermTabs(prev => [...prev, newTab])
+      }
+      setActiveTermTab(data.sessionId)
+    } catch {}
+  }, [name, termTabs, activeTermTab])
+
+  const closeTerminalTab = useCallback(async (sessionId: string) => {
+    // Stop and delete session
+    try {
+      await fetch(`${TS_HTTP}/api/sessions/${sessionId}`, { method: 'DELETE' })
+    } catch {}
+    setTermTabs(prev => {
+      const next = prev.filter(t => t.id !== sessionId)
+      if (activeTermTab === sessionId) {
+        setActiveTermTab(next.length > 0 ? next[0].id : null)
+      }
+      return next
+    })
+  }, [activeTermTab])
 
   useEffect(() => {
     if (!name) return
@@ -226,7 +326,7 @@ export default function AgentDetail() {
         )}
 
         {/* Terminal stage */}
-        <section className="flex-1 min-w-0 relative bg-[#0C111D] overflow-hidden">
+        <section className="flex-1 min-w-0 relative bg-[#0C111D] overflow-hidden flex flex-col">
           {/* Ambient glow */}
           <div
             className="pointer-events-none absolute top-0 right-0 h-[400px] w-[400px] blur-3xl"
@@ -235,8 +335,70 @@ export default function AgentDetail() {
               opacity: 0.06,
             }}
           />
-          <div className="relative z-10 h-full">
-            <AgentTerminal agent={name} accentColor={agentColor} />
+
+          {/* Terminal tabs bar — only show when there are multiple tabs */}
+          {termTabs.length > 1 && (
+            <div className="relative z-10 flex items-center flex-shrink-0 h-9 border-b border-[#21262d] bg-[#0d1117] overflow-x-auto">
+              {termTabs.map((tt) => (
+                <div
+                  key={tt.id}
+                  className={`group flex items-center gap-2 px-3 h-full text-[11px] cursor-pointer border-r border-[#21262d] transition-colors ${
+                    activeTermTab === tt.id
+                      ? 'bg-[#0C111D] text-[#e6edf3]'
+                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22]'
+                  }`}
+                  onClick={() => setActiveTermTab(tt.id)}
+                >
+                  <TerminalIcon size={11} style={{ color: activeTermTab === tt.id ? agentColor : undefined }} />
+                  <span className="truncate max-w-[120px]">{tt.name}</span>
+                  {tt.active && (
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: agentColor, boxShadow: `0 0 4px ${agentColor}88` }}
+                    />
+                  )}
+                  {termTabs.length > 1 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); closeTerminalTab(tt.id) }}
+                      className="opacity-0 group-hover:opacity-100 text-[#667085] hover:text-[#ef4444] transition-opacity"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {/* New tab button */}
+              <button
+                onClick={createNewTerminal}
+                className="flex items-center justify-center h-full px-2.5 text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22] transition-colors"
+                title="New terminal"
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+          )}
+
+          {/* Single "+" button when only one tab (or none) — show as floating button */}
+          {termTabs.length <= 1 && (
+            <button
+              onClick={createNewTerminal}
+              className="absolute top-1.5 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[#667085] hover:text-[#e6edf3] bg-[#0d1117]/80 hover:bg-[#161b22] border border-[#21262d] transition-colors"
+              title="New terminal"
+            >
+              <Plus size={11} />
+              <span className="hidden sm:inline">New</span>
+            </button>
+          )}
+
+          {/* Terminal content */}
+          <div className="relative z-10 flex-1 min-h-0">
+            {termTabs.length === 0 || activeTermTab === null ? (
+              // Default mode — single terminal, no explicit sessionId
+              <AgentTerminal key={`default-${name}`} agent={name} accentColor={agentColor} />
+            ) : (
+              // Multi-tab mode — render the active session
+              <AgentTerminal key={activeTermTab} agent={name} sessionId={activeTermTab} accentColor={agentColor} />
+            )}
           </div>
         </section>
       </div>

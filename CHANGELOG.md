@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.8] - 2026-04-13
+
+### Added
+
+- **Multi-terminal tabs per agent** — each agent page now supports multiple terminal sessions with a tab bar. Create new terminals with the `+` button, switch between them, and close sessions individually. Backend adds `GET /api/sessions/by-agent/:name` and `POST /api/sessions/create` endpoints
+- **Recent Agents section** — the Agents page shows the last 6 visited agents at the top for quick access, with avatar, name, command, and running indicator. Tracked via localStorage
+
+### Fixed
+
+- **systemd KillMode=none** — nohup background processes (Flask, terminal-server) were being killed when the oneshot ExecStart script finished. `KillMode=none` prevents systemd from sending SIGTERM to child processes
+- **install-service.sh regenerates start-services.sh** — the copied script had hardcoded `/root/` paths from the original installation, causing `Permission denied` errors when running as the `evonexus` user
+
 ## [0.18.7] - 2026-04-12
 
 ### Added

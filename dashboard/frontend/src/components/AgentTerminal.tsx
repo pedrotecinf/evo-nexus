@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css'
 
 interface AgentTerminalProps {
   agent: string
+  sessionId?: string
   workingDir?: string
   accentColor?: string
 }
@@ -24,7 +25,7 @@ const CC_WEB_WS = isLocal
 
 type Status = 'connecting' | 'ready' | 'starting' | 'running' | 'error' | 'exited'
 
-export default function AgentTerminal({ agent, workingDir, accentColor = '#00FFA7' }: AgentTerminalProps) {
+export default function AgentTerminal({ agent, sessionId: externalSessionId, workingDir, accentColor = '#00FFA7' }: AgentTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -140,19 +141,30 @@ export default function AgentTerminal({ agent, workingDir, accentColor = '#00FFA
       setErrorMsg(null)
       term!.clear()
 
-      // 1) Find-or-create session for this agent
+      // 1) Use provided sessionId or find-or-create for this agent
       let sessionId: string
       let alreadyActive = false
       try {
-        const res = await fetch(`${CC_WEB_HTTP}/api/sessions/for-agent`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentName: agent, workingDir }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        sessionId = data.sessionId
-        alreadyActive = !!data.session?.active
+        if (externalSessionId) {
+          // Use the specific session provided by the parent (multi-tab mode)
+          sessionId = externalSessionId
+          const infoRes = await fetch(`${CC_WEB_HTTP}/api/sessions/${externalSessionId}`)
+          if (infoRes.ok) {
+            const info = await infoRes.json()
+            alreadyActive = !!info.active
+          }
+        } else {
+          // Default: find-or-create session for this agent
+          const res = await fetch(`${CC_WEB_HTTP}/api/sessions/for-agent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentName: agent, workingDir }),
+          })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          sessionId = data.sessionId
+          alreadyActive = !!data.session?.active
+        }
       } catch (e: any) {
         if (cancelled) return
         setStatus('error')
@@ -277,7 +289,7 @@ export default function AgentTerminal({ agent, workingDir, accentColor = '#00FFA
         wsRef.current = null
       }
     }
-  }, [agent, workingDir])
+  }, [agent, externalSessionId, workingDir])
 
   const statusDotColor =
     status === 'running'

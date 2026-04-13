@@ -610,12 +610,37 @@ function SubSectionHeader({ label, count }: { label: string; count: number }) {
   )
 }
 
+// Recent agents — persisted in localStorage
+const RECENT_KEY = 'evo:recent-agents'
+const MAX_RECENT = 6
+
+function getRecentAgents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    if (!raw) return []
+    const data = JSON.parse(raw) as { name: string; ts: number }[]
+    return data.sort((a, b) => b.ts - a.ts).map(d => d.name).slice(0, MAX_RECENT)
+  } catch { return [] }
+}
+
+export function trackAgentVisit(agentName: string) {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    let data: { name: string; ts: number }[] = raw ? JSON.parse(raw) : []
+    data = data.filter(d => d.name !== agentName)
+    data.unshift({ name: agentName, ts: Date.now() })
+    data = data.slice(0, MAX_RECENT)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(data))
+  } catch {}
+}
+
 export default function Agents() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [runningAgents, setRunningAgents] = useState<string[]>([])
   const [filter, setFilter] = useState<FilterValue>('all')
   const [query, setQuery] = useState('')
+  const [recentNames] = useState(getRecentAgents)
 
   useEffect(() => {
     api.get('/agents')
@@ -749,6 +774,49 @@ export default function Agents() {
           </div>
         )}
       </div>
+
+      {/* Recent agents */}
+      {!loading && recentNames.length > 0 && filter === 'all' && !query && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <History size={13} className="text-[#667085]" />
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-[#667085]">Recent</h2>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {recentNames
+              .filter(n => agents.some(a => a.name === n))
+              .map(name => {
+                const meta = AGENT_META[name] || DEFAULT_META
+                const running = isRunning(name)
+                return (
+                  <Link
+                    key={name}
+                    to={`/agents/${name}`}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-[#21262d] bg-[#161b22] hover:border-[#30363d] hover:bg-[#1c2333] transition-all flex-shrink-0 group"
+                  >
+                    <div className="relative flex-shrink-0">
+                      <AgentAvatar name={name} size={28} />
+                      {running && (
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#161b22]"
+                          style={{ backgroundColor: '#22C55E', boxShadow: '0 0 6px rgba(34,197,94,0.5)' }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[12px] font-medium text-[#e6edf3] group-hover:text-white truncate">
+                        {name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}
+                      </span>
+                      <span className="text-[10px] font-mono" style={{ color: meta.color }}>
+                        {meta.command}
+                      </span>
+                    </div>
+                  </Link>
+                )
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Filter + Search bar */}
       {!loading && agents.length > 0 && (
