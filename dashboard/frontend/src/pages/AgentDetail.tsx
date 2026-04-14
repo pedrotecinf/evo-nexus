@@ -181,6 +181,7 @@ export default function AgentDetail() {
         preview: s.preview || undefined,
         ts: typeof s.lastActivity === 'number' ? s.lastActivity : (s.lastActivity ? new Date(s.lastActivity).getTime() : undefined),
         ticketId: s.ticketId || null,
+        archived: s.archived || false,
       }))
       setChatSessions(sessions)
       // Auto-select first session only if none active
@@ -221,6 +222,40 @@ export default function AgentDetail() {
     // Reload sessions list to get fresh previews and order
     loadChatSessions()
   }, [loadChatSessions])
+
+  const renameChatSession = useCallback(async (id: string, newName: string) => {
+    try {
+      await fetch(`${TS_HTTP}/api/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      })
+      loadChatSessions()
+    } catch {}
+  }, [loadChatSessions])
+
+  const archiveChatSession = useCallback(async (id: string, archived: boolean) => {
+    try {
+      await fetch(`${TS_HTTP}/api/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      })
+      loadChatSessions()
+    } catch {}
+  }, [loadChatSessions])
+
+  const deleteChatSession = useCallback(async (id: string) => {
+    try {
+      await fetch(`${TS_HTTP}/api/sessions/${id}`, { method: 'DELETE' })
+      setChatSessions(prev => prev.filter(s => s.id !== id))
+      setActiveChatSessionId(prev => {
+        if (prev !== id) return prev
+        const remaining = chatSessions.filter(s => s.id !== id && !s.archived)
+        return remaining.length > 0 ? remaining[0].id : null
+      })
+    } catch {}
+  }, [chatSessions])
 
   // Auto-create a chat session when switching to chat mode if none exist
   useEffect(() => {
@@ -420,6 +455,9 @@ export default function AgentDetail() {
             onSelectChatSession={selectChatSession}
             onNewChatSession={createNewChatSession}
             approvalCounts={approvalCountsRef.current}
+            onRename={renameChatSession}
+            onArchive={archiveChatSession}
+            onDelete={deleteChatSession}
           />
         </aside>
 
@@ -461,6 +499,9 @@ export default function AgentDetail() {
                 onSelectChatSession={selectChatSession}
                 onNewChatSession={createNewChatSession}
                 approvalCounts={approvalCountsRef.current}
+                onRename={renameChatSession}
+                onArchive={archiveChatSession}
+                onDelete={deleteChatSession}
               />
             </aside>
           </div>
@@ -590,6 +631,9 @@ interface InfoRailProps {
   onSelectChatSession: (id: string) => void
   onNewChatSession: () => void
   approvalCounts: Map<string, number>
+  onRename: (id: string, newName: string) => void
+  onArchive: (id: string, archived: boolean) => void
+  onDelete: (id: string) => void
 }
 
 function InfoRail({
@@ -608,6 +652,9 @@ function InfoRail({
   onSelectChatSession,
   onNewChatSession,
   approvalCounts,
+  onRename,
+  onArchive,
+  onDelete,
 }: InfoRailProps) {
   return (
     <>
@@ -640,6 +687,9 @@ function InfoRail({
             onNewSession={onNewChatSession}
             accentColor={agentColor}
             approvalCounts={approvalCounts}
+            onRename={onRename}
+            onArchive={onArchive}
+            onDelete={onDelete}
           />
         )}
 

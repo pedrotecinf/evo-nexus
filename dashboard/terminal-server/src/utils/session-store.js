@@ -42,6 +42,8 @@ class SessionStore {
                 sdkSessionId: session.sdkSessionId || null,
                 // Ticket binding (Feature 1.3)
                 ticketId: session.ticketId || null,
+                // Archive flag
+                archived: session.archived || false,
                 // Session-specific usage tracking
                 sessionStartTime: session.sessionStartTime || null,
                 sessionUsage: session.sessionUsage || {

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.1] - 2026-04-14
+
+### Added
+
+- **Right-click context menu on chat sessions** — Rename (inline edit), Archive/Unarchive, Delete (with confirm). Archived sessions collapse into a "Arquivadas" footer section at the bottom of the list; section is hidden entirely when there are no archived entries. New `PATCH /api/sessions/:id` endpoint accepts `{name?, archived?}`; `archived` field persists to `session-store.js`.
+
 ## [0.22.0] - 2026-04-14
 
 ### Added

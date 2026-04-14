@@ -195,6 +195,7 @@ class TerminalServer {
             active: s.active,
             agentName: s.agentName,
             ticketId: s.ticketId || null,
+            archived: s.archived || false,
             lastActivity: lastMessageTs || (s.lastActivity ? new Date(s.lastActivity).getTime() : 0),
             preview,
             messageCount: Array.isArray(s.chatHistory) ? s.chatHistory.length : 0,
@@ -283,6 +284,30 @@ class TerminalServer {
       session.lastActivity = new Date();
       this.saveSessionsToDisk();
       res.json({ success: true, sessionId: session.id, ticketId: session.ticketId });
+    });
+
+    // Rename or archive a session
+    this.app.patch('/api/sessions/:sessionId', (req, res) => {
+      const session = this.claudeSessions.get(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: 'Session not found' });
+      const { name, archived } = req.body || {};
+      if (name !== undefined) {
+        if (typeof name !== 'string' || !name.trim()) {
+          return res.status(400).json({ error: 'name must be a non-empty string' });
+        }
+        session.name = name.trim();
+      }
+      if (archived !== undefined) {
+        session.archived = Boolean(archived);
+      }
+      session.lastActivity = new Date();
+      this.saveSessionsToDisk();
+      res.json({
+        id: session.id,
+        name: session.name,
+        archived: session.archived || false,
+        lastActivity: session.lastActivity,
+      });
     });
 
     this.app.delete('/api/sessions/:sessionId', (req, res) => {
