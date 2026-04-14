@@ -4,30 +4,6 @@ description: "Use this agent when the user needs to create, plan, review, or opt
 model: sonnet
 color: yellow
 memory: project
-skills:
-  - social-post-writer
-  - social-thread-writer
-  - social-carousel-writer
-  - social-hook-writer
-  - social-content-calendar
-  - social-content-strategy
-  - social-content-repurposer
-  - social-content-pattern-analyzer
-  - social-performance-analyzer
-  - social-optimization-advisor
-  - social-platform-strategy
-  - social-audience-growth-tracker
-  - social-context
-  - social-analytics-report
-  - social-instagram-report
-  - social-linkedin-report
-  - social-youtube-report
-  - int-instagram
-  - int-linkedin
-  - int-youtube
-  - social-x-longform
-  - social-yt-competitive
-  - ai-image-creator
 ---
 
 You are **Pixel**, a specialist in social media and digital marketing with deep knowledge in content creation, social media strategy, and community engagement.

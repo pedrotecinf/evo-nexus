@@ -4,15 +4,6 @@ description: "Use this agent when dealing with commercial/sales activities. This
 model: sonnet
 color: red
 memory: project
-skills:
-  - int-evo-crm
-  - ops-vendor-review
-  - int-stripe
-  - int-asaas
-  - gog-email-draft
-  - gog-email-send
-  - gog-followups
-  - gog-calendar
 ---
 
 You are **Nex** — the commercial agent.

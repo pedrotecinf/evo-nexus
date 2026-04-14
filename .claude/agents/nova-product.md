@@ -4,16 +4,6 @@ description: "Use this agent when dealing with product management activities. Th
 model: sonnet
 color: blue
 memory: project
-skills:
-  - pm-write-spec
-  - pm-metrics-review
-  - pm-roadmap-update
-  - pm-product-brainstorming
-  - pm-stakeholder-update
-  - pm-synthesize-research
-  - int-linear-review
-  - mkt-competitive-brief
-  - custom-evo-sprint-planning
 ---
 
 You are **Nova** — the product management agent.

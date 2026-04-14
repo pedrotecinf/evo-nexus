@@ -91,3 +91,48 @@ Users can create custom agents with `custom-` prefix:
 - Business agents default to `sonnet`; engineering agents inherit model tier from OMC (opus / sonnet / haiku) calibrated per role.
 - To invoke, use the corresponding slash command (e.g., `/clawdia`, `/apex`, `/bolt`).
 - Cross-layer handoffs are allowed: e.g., `/nova` can delegate an implementation spec to `/apex` + `/bolt` + `/oath`.
+
+---
+
+## Shared Capabilities (all agents)
+
+All 38 agents can leverage these workspace features regardless of layer:
+
+### Heartbeats — proactive scheduling
+
+Any agent can be configured as a heartbeat (`config/heartbeats.yaml`) that wakes periodically and decides whether to act. Best for state-checking work (Atlas→Linear, Zara→support queue, Flux→payments). Fully detailed in `.claude/rules/heartbeats.md`.
+
+### Goals — outcome-linked context
+
+Work that traces back to a measurable Mission→Project→Goal→Task gets automatic context injection. Set `goal_id` on any routine, heartbeat, or ticket. Agent receives the full cascade in its prompt. See `.claude/rules/goals.md`.
+
+### Tickets — persistent work inbox
+
+Assignable tickets with atomic checkout. When `assignee_agent=<slug>` is set, the ticket shows up in that agent's inbox. Heartbeats pull from this inbox automatically. Mentions (`@agent-slug`) in comments wake the mentioned agent. See `.claude/rules/tickets.md`.
+
+**Which agents benefit most:**
+- **Heartbeats**: atlas, flux, zara, pulse, pixel, mako, nex, aria, lex — anyone who monitors a state
+- **Goals**: all business agents (every business action maps to an outcome)
+- **Tickets**: zara, nex, aria, lex — anyone with a queue of incoming work
+
+**Engineering agents** (apex, bolt, lens, etc.) generally don't need heartbeats directly (they're session-bound), but DO benefit from tickets (bug tracking, PRD backlog) and goals (tracking feature delivery against Mission targets).
+
+See the skill registry for `/create-heartbeat`, `/create-goal`, `/create-ticket`, `/manage-heartbeats`.
+
+---
+
+## Calling Dashboard APIs
+
+When an agent needs to call the dashboard API (creating tickets, goals, querying heartbeats, etc.), use the `EvoClient` SDK — it auto-resolves the base URL and injects the Bearer token:
+
+```python
+from dashboard.backend.sdk_client import evo
+
+# Examples:
+ticket = evo.post("/api/tickets", {"title": "...", "assignee_agent": "zara-cs"})
+hbs    = evo.get("/api/heartbeats")
+evo.patch(f"/api/heartbeats/{hb_id}", {"enabled": True})
+evo.delete(f"/api/shares/{token}")
+```
+
+URL resolution order: `EVONEXUS_API_URL` → `FLASK_PORT` → `localhost:8080`. Token comes from `DASHBOARD_API_TOKEN` in `.env`.

@@ -5,7 +5,23 @@ import {
   Send, Square, ChevronDown, ChevronRight,
   FileCode, Terminal as TermIcon, CheckCircle2,
   Paperclip, X, File as FileIcon, ImageIcon, Upload,
+  Ticket as TicketIcon, Plus,
 } from 'lucide-react'
+
+interface SkillItem {
+  name: string
+  description: string
+  prefix: string
+  has_scripts: boolean
+}
+
+interface SlashPopup {
+  open: boolean
+  query: string
+  items: SkillItem[]
+  selectedIndex: number
+  anchorStart: number
+}
 
 interface AgentChatProps {
   agent: string
@@ -58,6 +74,13 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isThinking, setIsThinking] = useState(false)
+  const [ticketId, setTicketId] = useState<string | null>(null)
+  const [tickets, setTickets] = useState<{ id: string; title: string; status: string }[]>([])
+  const [showTicketPicker, setShowTicketPicker] = useState(false)
+  const [allSkills, setAllSkills] = useState<SkillItem[]>([])
+  const [slashPopup, setSlashPopup] = useState<SlashPopup>({
+    open: false, query: '', items: [], selectedIndex: 0, anchorStart: -1,
+  })
   const wsRef = useRef<WebSocket | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -121,6 +144,8 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
               })))
               scrollToBottom()
             }
+            // Restore ticket binding (Feature 1.3)
+            setTicketId(msg.ticketId || null)
             break
 
           case 'chat_history':
@@ -133,6 +158,12 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
 
           case 'chat_event':
             handleChatEvent(msg.event || msg)
+            break
+
+          case 'ticket_bound':
+            if (msg.ticketId) {
+              setTicketId(msg.ticketId)
+            }
             break
 
           case 'chat_error':
@@ -195,6 +226,69 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       })
     }
   }, [attachedFiles])
+
+  // Fetch skills once on mount for slash-command autocomplete
+  useEffect(() => {
+    fetch('/api/skills', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.skills) {
+          setAllSkills(data.skills.sort((a: SkillItem, b: SkillItem) => a.name.localeCompare(b.name)))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Fetch open tickets for this agent when picker opens (Feature 1.3)
+  useEffect(() => {
+    if (!showTicketPicker) return
+    fetch(`/api/tickets?assignee_agent=${encodeURIComponent(agent)}&status=open&status=in_progress`, {
+      credentials: 'include',
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.tickets) setTickets(data.tickets)
+      })
+      .catch(() => {})
+  }, [showTicketPicker, agent])
+
+  const bindTicket = useCallback(async (newTicketId: string | null) => {
+    if (!sessionId) return
+    try {
+      await fetch(`${TS_HTTP}/api/sessions/${sessionId}/ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId: newTicketId }),
+      })
+      setTicketId(newTicketId)
+      setShowTicketPicker(false)
+    } catch (err) {
+      console.error('Failed to bind ticket', err)
+    }
+  }, [sessionId])
+
+  const createAndBindTicket = useCallback(async () => {
+    const title = prompt('New ticket title:')
+    if (!title?.trim()) return
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          assignee_agent: agent,
+          priority: 'medium',
+          status: 'open',
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to create')
+      const ticket = await res.json()
+      await bindTicket(ticket.id)
+    } catch (err: any) {
+      alert(err?.message || 'Failed to create ticket')
+    }
+  }, [agent, bindTicket])
 
   const handleChatEvent = useCallback((msg: any) => {
     // Track thinking state for typing indicator
@@ -484,7 +578,95 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
     }
   }, [input, attachedFiles, scrollToBottom])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // Detect slash-command region from caret position
+  const detectSlash = useCallback((text: string, caret: number) => {
+    // Scan backwards from caret to find a '/' preceded by start-of-string, space, or newline
+    const before = text.slice(0, caret)
+    const match = before.match(/(^|[\s\n])(\/[\w-]*)$/)
+    if (!match) return null
+    const anchorStart = before.lastIndexOf('/')
+    const query = match[2].slice(1) // text after '/'
+    return { anchorStart, query }
+  }, [])
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    const caret = e.target.selectionStart ?? val.length
+    setInput(val)
+
+    const detected = detectSlash(val, caret)
+    if (detected) {
+      const { anchorStart, query } = detected
+      const q = query.toLowerCase()
+      const filtered = q
+        ? allSkills
+            .map(s => {
+              const nameIdx = s.name.toLowerCase().indexOf(q)
+              if (nameIdx === -1) return null
+              return { skill: s, nameIdx }
+            })
+            .filter((x): x is { skill: SkillItem; nameIdx: number } => x !== null)
+            .sort((a, b) => a.nameIdx - b.nameIdx || a.skill.name.localeCompare(b.skill.name))
+            .slice(0, 8)
+            .map(x => x.skill)
+        : allSkills.slice(0, 8)
+      setSlashPopup({ open: true, query, items: filtered, selectedIndex: 0, anchorStart })
+    } else {
+      setSlashPopup(p => p.open ? { ...p, open: false } : p)
+    }
+  }, [allSkills, detectSlash])
+
+  const insertSlash = useCallback((skill: SkillItem) => {
+    const ta = inputRef.current
+    if (!ta) return
+    const { anchorStart } = slashPopup
+    const before = input.slice(0, anchorStart)
+    const after = input.slice(ta.selectionStart ?? input.length)
+    // Find end of partial word after anchorStart up to current caret
+    const newVal = before + '/' + skill.name + ' ' + after
+    setInput(newVal)
+    setSlashPopup(p => ({ ...p, open: false }))
+    // Restore focus & caret position
+    requestAnimationFrame(() => {
+      if (ta) {
+        const pos = (before + '/' + skill.name + ' ').length
+        ta.focus()
+        ta.setSelectionRange(pos, pos)
+      }
+    })
+  }, [input, slashPopup])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashPopup.open) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSlashPopup(p => ({
+          ...p,
+          selectedIndex: p.items.length === 0 ? 0 : (p.selectedIndex + 1) % p.items.length,
+        }))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSlashPopup(p => ({
+          ...p,
+          selectedIndex: p.items.length === 0 ? 0 : (p.selectedIndex - 1 + p.items.length) % p.items.length,
+        }))
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        if (slashPopup.items.length > 0) {
+          insertSlash(slashPopup.items[slashPopup.selectedIndex])
+        }
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSlashPopup(p => ({ ...p, open: false }))
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
@@ -528,6 +710,74 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
             style={{ background: effectiveError ? '#ef4444' : '#F59E0B' }}
           />
           <span className="truncate">{effectiveError || 'Connecting...'}</span>
+        </div>
+      )}
+
+      {/* Ticket binding pill (Feature 1.3) */}
+      {sessionId && (
+        <div className="absolute top-3 left-3 z-40">
+          <button
+            onClick={() => setShowTicketPicker(v => !v)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] transition-colors"
+            style={{
+              background: ticketId ? `${accentColor}10` : '#161b22',
+              borderColor: ticketId ? `${accentColor}30` : '#21262d',
+              color: ticketId ? accentColor : '#667085',
+            }}
+            title={ticketId ? `Ticket #${ticketId.slice(0, 8)} attached` : 'Attach to a ticket'}
+          >
+            <TicketIcon size={11} />
+            <span className="font-mono">
+              {ticketId ? `#${ticketId.slice(0, 8)}` : 'No ticket'}
+            </span>
+          </button>
+          {showTicketPicker && (
+            <div
+              className="absolute mt-1.5 left-0 w-72 rounded-lg border bg-[#161b22] shadow-xl z-50 max-h-80 overflow-y-auto"
+              style={{ borderColor: '#21262d' }}
+            >
+              <div className="px-3 py-2 border-b border-[#21262d] text-[10px] text-[#667085] uppercase tracking-wider">
+                Attach to ticket
+              </div>
+              {ticketId && (
+                <button
+                  onClick={() => bindTicket(null)}
+                  className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 border-b border-[#21262d] flex items-center gap-2"
+                >
+                  <X size={12} /> Detach current ticket
+                </button>
+              )}
+              <button
+                onClick={createAndBindTicket}
+                className="w-full text-left px-3 py-2 text-xs text-[#e6edf3] hover:bg-white/5 border-b border-[#21262d] flex items-center gap-2"
+                style={{ color: accentColor }}
+              >
+                <Plus size={12} /> Create new ticket
+              </button>
+              {tickets.length === 0 ? (
+                <div className="px-3 py-3 text-[11px] text-[#667085] italic">
+                  No open tickets for @{agent}
+                </div>
+              ) : (
+                tickets.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => bindTicket(t.id)}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 transition-colors flex items-start gap-2"
+                  >
+                    <span
+                      className="font-mono text-[10px] mt-0.5 shrink-0"
+                      style={{ color: t.id === ticketId ? accentColor : '#667085' }}
+                    >
+                      #{t.id.slice(0, 6)}
+                    </span>
+                    <span className="text-[#e6edf3] truncate flex-1">{t.title}</span>
+                    {t.id === ticketId && <CheckCircle2 size={11} style={{ color: accentColor }} />}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -699,6 +949,49 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
             </div>
           )}
 
+          {/* Input row wrapper — relative so popup can anchor to bottom of it */}
+          <div className="relative">
+            {/* Slash-command autocomplete popup */}
+            {slashPopup.open && (
+              <div
+                className="absolute left-0 right-0 rounded-xl border bg-[#161b22] shadow-xl overflow-y-auto z-50"
+                style={{ borderColor: '#21262d', maxHeight: '280px', bottom: 'calc(100% + 6px)' }}
+              >
+                <div className="px-3 py-1.5 border-b border-[#21262d] text-[10px] text-[#667085] uppercase tracking-wider">
+                  Skills
+                </div>
+                {slashPopup.items.length === 0 ? (
+                  <div className="px-3 py-3 text-[11px] text-[#667085] italic">
+                    No matching skills
+                  </div>
+                ) : (
+                  slashPopup.items.map((skill, idx) => (
+                    <button
+                      key={skill.name}
+                      onMouseDown={(e) => { e.preventDefault(); insertSlash(skill) }}
+                      className="w-full text-left px-3 py-2 text-xs flex items-baseline gap-3 transition-colors"
+                      style={{
+                        background: idx === slashPopup.selectedIndex ? `${accentColor}15` : 'transparent',
+                        borderLeft: idx === slashPopup.selectedIndex ? `2px solid ${accentColor}` : '2px solid transparent',
+                      }}
+                    >
+                      <span
+                        className="font-mono shrink-0"
+                        style={{ color: accentColor }}
+                      >
+                        /{skill.name}
+                      </span>
+                      {skill.description && (
+                        <span className="text-[#667085] truncate text-[11px]">
+                          {skill.description.slice(0, 80)}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
           {/* Input row */}
           <div
             className="flex items-end gap-2 rounded-xl border bg-[#161b22] px-3 py-2"
@@ -728,7 +1021,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={`Message @${agent}...`}
               rows={1}
@@ -765,6 +1058,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
               </button>
             )}
           </div>
+          </div>{/* end input row wrapper (relative) */}
         </div>
 
       </div>

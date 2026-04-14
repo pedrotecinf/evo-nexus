@@ -25,8 +25,18 @@ The workspace has skills in two layers:
 | `discord-` | Discord (messages, channels, manage, create) | 5 |
 | `pulse-` | Community (daily, weekly, monthly, FAQ sync) | 4 |
 | `sage-` | Strategy (OKR review, strategy digest, competitive analysis) | 3 |
+| `create-` | Workspace management (create-routine, create-agent, create-command, create-heartbeat, create-goal, create-ticket, manage-heartbeats) | 7 |
 
 > **Note:** `evo-*` skills (Evo Method) have been moved to the separate [EVO-METHOD](https://github.com/EvolutionAPI/EVO-METHOD) project.
+
+## Phase 1 skills (Heartbeats + Goals + Tickets)
+
+- **`create-heartbeat`** — create a proactive agent (9-step protocol) via interactive wizard
+- **`create-goal`** — create Mission / Project / Goal in the 4-level cascade
+- **`create-ticket`** — create a persistent work thread with assignee + priority
+- **`manage-heartbeats`** — list, enable/disable, manually trigger, review runs
+
+See `.claude/rules/heartbeats.md`, `.claude/rules/goals.md`, `.claude/rules/tickets.md`.
 
 ## How to Use
 

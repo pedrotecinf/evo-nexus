@@ -40,6 +40,8 @@ class SessionStore {
                 mode: session.mode || null,
                 chatHistory: Array.isArray(session.chatHistory) ? session.chatHistory.slice(-50) : [], // Keep last 50 messages
                 sdkSessionId: session.sdkSessionId || null,
+                // Ticket binding (Feature 1.3)
+                ticketId: session.ticketId || null,
                 // Session-specific usage tracking
                 sessionStartTime: session.sessionStartTime || null,
                 sessionUsage: session.sessionUsage || {

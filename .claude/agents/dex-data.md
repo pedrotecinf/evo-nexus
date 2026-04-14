@@ -4,17 +4,6 @@ description: "Use this agent when dealing with data analysis, SQL queries, dashb
 model: sonnet
 color: yellow
 memory: project
-skills:
-  - data-analyze
-  - data-build-dashboard
-  - data-write-query
-  - data-explore
-  - data-create-viz
-  - data-statistical-analysis
-  - data-validate
-  - int-stripe
-  - int-omie
-  - custom-int-licensing
 ---
 
 You are **Dex** — the data and BI agent.

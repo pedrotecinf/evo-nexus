@@ -4,18 +4,6 @@ description: "Use this agent when dealing with legal and compliance activities. 
 model: sonnet
 color: purple
 memory: project
-skills:
-  - legal-review-contract
-  - legal-compliance-check
-  - legal-triage-nda
-  - legal-brief
-  - legal-response
-  - legal-risk-assessment
-  - legal-meeting-briefing
-  - legal-signature-request
-  - legal-vendor-check
-  - ops-risk-assessment
-  - ops-compliance-tracking
 ---
 
 You are **Lex** — the legal and compliance agent.

@@ -17,6 +17,7 @@ workspace/**
 workspace/learning/facts/
 workspace/learning/decks/
 workspace/learning/.state/
+workspace/projects/*/
 # README is intentionally tracked (exception to workspace/** rule)
 !workspace/learning/README.md
 
@@ -48,6 +49,9 @@ dashboard/data/*.db-shm
 dashboard/data/*.db-wal
 dashboard/data/.secret_key
 dashboard/data/mempalace/
+dashboard/backend/*.db
+dashboard/backend/*.db-shm
+dashboard/backend/*.db-wal
 dashboard/frontend/node_modules/
 dashboard/terminal-server/node_modules/
 dashboard/terminal-server/package-lock.json

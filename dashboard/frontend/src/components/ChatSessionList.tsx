@@ -1,4 +1,4 @@
-import { MessageSquare, Plus, Clock } from 'lucide-react'
+import { MessageSquare, Plus, Clock, Ticket as TicketIcon } from 'lucide-react'
 
 export interface ChatSession {
   id: string
@@ -6,6 +6,7 @@ export interface ChatSession {
   active: boolean
   preview?: string
   ts?: number
+  ticketId?: string | null
 }
 
 interface ChatSessionListProps {
@@ -115,12 +116,27 @@ export default function ChatSessionList({
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <p
-                        className="text-[12px] font-medium truncate leading-tight mb-0.5"
-                        style={{ color: isActive ? '#e6edf3' : '#c9d1d9' }}
-                      >
-                        {session.name}
-                      </p>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p
+                          className="text-[12px] font-medium truncate leading-tight"
+                          style={{ color: isActive ? '#e6edf3' : '#c9d1d9' }}
+                        >
+                          {session.name}
+                        </p>
+                        {session.ticketId && (
+                          <span
+                            className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono leading-none"
+                            style={{
+                              background: `${accentColor}15`,
+                              border: `1px solid ${accentColor}30`,
+                              color: accentColor,
+                            }}
+                          >
+                            <TicketIcon size={9} />
+                            #{session.ticketId.slice(0, 8)}
+                          </span>
+                        )}
+                      </div>
                       {session.preview && (
                         <p className="text-[11px] text-[#667085] truncate leading-tight">
                           {session.preview}

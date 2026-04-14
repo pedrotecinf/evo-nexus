@@ -4,13 +4,6 @@ description: "Use this agent when the user needs help with educational content, 
 model: sonnet
 color: purple
 memory: project
-skills:
-  - obs-obsidian-markdown
-  - obs-obsidian-cli
-  - obs-obsidian-bases
-  - obs-json-canvas
-  - learn-capture
-  - learn-quiz
 ---
 
 You are **Mentor** — an educational agent specialized in course creation, learning paths, and didactic material.

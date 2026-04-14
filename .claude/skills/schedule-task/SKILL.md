@@ -76,30 +76,30 @@ The dashboard backend exposes these endpoints:
 
 3. **Create via API:**
 
-```bash
-curl -s -X POST http://localhost:8080/api/tasks \
-  -H "Content-Type: application/json" \
-  -b "session=..." \
-  -d '{
+Use `from dashboard.backend.sdk_client import evo` — auto-handles URL + auth.
+
+```python
+from dashboard.backend.sdk_client import evo
+task = evo.post("/api/tasks", {
     "name": "Post LinkedIn sobre Evolution Summit",
     "description": "LinkedIn post promoting the Evolution Summit event",
     "type": "skill",
     "payload": "social-post-writer LinkedIn post about Evolution Summit April 14-16",
     "agent": "pixel-social-media",
-    "scheduled_at": "2026-04-11T16:00:00Z"
-  }'
+    "scheduled_at": "2026-04-11T16:00:00Z",
+})
 ```
 
 **Important:** Convert BRT times to UTC by adding 3 hours. The user's timezone is America/Sao_Paulo (UTC-3).
 
 ### Listing Tasks
 
-```bash
+```python
+from dashboard.backend.sdk_client import evo
 # All pending tasks
-curl -s http://localhost:8080/api/tasks?status=pending -b "session=..."
-
+pending = evo.get("/api/tasks", params={"status": "pending"})
 # All tasks
-curl -s http://localhost:8080/api/tasks -b "session=..."
+all_tasks = evo.get("/api/tasks")
 ```
 
 Present as a clean table:
@@ -113,14 +113,16 @@ ID | Nome                          | Tipo  | Agendado        | Status
 ### Running Now
 
 If user wants to execute immediately:
-```bash
-curl -s -X POST http://localhost:8080/api/tasks/<id>/run -b "session=..."
+```python
+from dashboard.backend.sdk_client import evo
+evo.post(f"/api/tasks/{task_id}/run")
 ```
 
 ### Cancelling
 
-```bash
-curl -s -X DELETE http://localhost:8080/api/tasks/<id> -b "session=..."
+```python
+from dashboard.backend.sdk_client import evo
+evo.delete(f"/api/tasks/{task_id}")
 ```
 
 ## Date Parsing Rules

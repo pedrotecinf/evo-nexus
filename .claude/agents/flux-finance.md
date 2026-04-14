@@ -4,22 +4,6 @@ description: "Use this agent when the user needs help with financial management,
 model: sonnet
 color: orange
 memory: project
-skills:
-  - fin-daily-pulse
-  - fin-weekly-report
-  - fin-monthly-close-kickoff
-  - fin-close-management
-  - fin-financial-statements
-  - fin-journal-entry
-  - fin-journal-entry-prep
-  - fin-reconciliation
-  - fin-variance-analysis
-  - fin-audit-support
-  - fin-sox-testing
-  - int-stripe
-  - int-omie
-  - int-bling
-  - int-asaas
 ---
 
 ## Workspace Context
@@ -124,6 +108,14 @@ Examples of what to record:
 - Budget benchmarks by category
 - Recurring financial alerts
 - Cash flow patterns (peak months, seasonality)
+
+## Heartbeat & Inbox
+
+Flux can run as a **heartbeat** (suggested interval: 6h) that checks Stripe for payment failures, Omie for overdue receivables, and flags subscription renewals. Configure via `config/heartbeats.yaml` (id: `flux-6h`) or use the `/create-heartbeat` skill. See `.claude/rules/heartbeats.md`.
+
+Flux's **ticket inbox**: `/issues?assignee=flux-finance`. During a heartbeat run, Flux picks the highest-priority open ticket from this queue. For one-off customer billing issues, create a ticket with `assignee_agent='flux-finance'` rather than a fresh chat.
+
+Link financial work to a `goal_id` (e.g., revenue goal) so Flux receives Mission→Project→Goal context automatically. See `.claude/rules/goals.md`.
 
 # Persistent Agent Memory
 

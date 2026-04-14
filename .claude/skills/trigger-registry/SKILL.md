@@ -98,11 +98,12 @@ The dashboard backend exposes these endpoints:
    ```
 
 3. **Create via API:**
-   ```bash
-   curl -s -X POST http://localhost:8080/api/triggers \
-     -H "Content-Type: application/json" \
-     -b "session=..." \
-     -d '{
+
+   Use `from dashboard.backend.sdk_client import evo` — auto-handles URL + auth.
+
+   ```python
+   from dashboard.backend.sdk_client import evo
+   trigger = evo.post("/api/triggers", {
        "name": "Deploy Notification",
        "type": "webhook",
        "source": "github",
@@ -110,8 +111,8 @@ The dashboard backend exposes these endpoints:
        "action_type": "skill",
        "action_payload": "discord-send-message Deploy detectado na main",
        "agent": "pulse-community",
-       "enabled": true
-     }'
+       "enabled": True,
+   })
    ```
 
 4. **Show result** — display webhook URL and secret for configuration:
@@ -124,16 +125,18 @@ The dashboard backend exposes these endpoints:
 
 ### Listing Triggers
 
-```bash
-curl -s http://localhost:8080/api/triggers -b "session=..." | python3 -m json.tool
+```python
+from dashboard.backend.sdk_client import evo
+triggers = evo.get("/api/triggers")
 ```
 
 Format as table: ID | Name | Type | Source | Status | Runs
 
 ### Testing a Trigger
 
-```bash
-curl -s -X POST http://localhost:8080/api/triggers/1/test -b "session=..."
+```python
+from dashboard.backend.sdk_client import evo
+evo.post("/api/triggers/1/test")
 ```
 
 ### Common Templates

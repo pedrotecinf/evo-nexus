@@ -12,17 +12,20 @@ Use this skill when the user wants to:
 
 ## Actions
 
+Use `from dashboard.backend.sdk_client import evo` — auto-handles URL + auth.
+
 ### 1. Create share link
 
 Accepts a file path (explicit or resolved from context, e.g., "today's dashboard").
 
 **Smart resolution:** If the user says "share the financial pulse" or "share today's report", search `workspace/` for the most recent matching file (e.g., `workspace/finance/*pulse*.html`) and confirm with the user before sharing.
 
-```bash
-curl -s -X POST http://localhost:8080/api/shares \
-  -H "Authorization: Bearer $DASHBOARD_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"path": "<repo-relative-path>", "expires_in": "7d"}'
+```python
+from dashboard.backend.sdk_client import evo
+share = evo.post("/api/shares", {
+    "path": "<repo-relative-path>",
+    "expires_in": "7d",
+})
 ```
 
 `expires_in` options: `"1h"`, `"24h"`, `"7d"`, `"30d"`, or `null` (no expiration).
@@ -31,9 +34,9 @@ Returns `{ token, url, expires_at }`. Present the `url` to the user — this is 
 
 ### 2. List active shares
 
-```bash
-curl -s http://localhost:8080/api/shares \
-  -H "Authorization: Bearer $DASHBOARD_API_TOKEN"
+```python
+from dashboard.backend.sdk_client import evo
+result = evo.get("/api/shares")
 ```
 
 Returns `{ shares: [...] }`. Format as a readable table showing: file path, created by, created at, expires at, views, status.
@@ -42,16 +45,12 @@ Returns `{ shares: [...] }`. Format as a readable table showing: file path, crea
 
 Accepts a token or identifies the share from context (e.g., file path).
 
-```bash
-curl -s -X DELETE http://localhost:8080/api/shares/<token> \
-  -H "Authorization: Bearer $DASHBOARD_API_TOKEN"
+```python
+from dashboard.backend.sdk_client import evo
+evo.delete(f"/api/shares/{token}")
 ```
 
 Confirm with the user before revoking (the link becomes immediately inaccessible).
-
-## Auth
-
-Uses `DASHBOARD_API_TOKEN` environment variable for Bearer auth. This is the same token used by other dashboard-calling skills. The token is pre-configured in `.env`.
 
 ## Notes
 

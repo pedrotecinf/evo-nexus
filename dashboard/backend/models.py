@@ -90,6 +90,9 @@ ALL_RESOURCES = {
     "tasks": ["view", "execute", "manage"],
     "triggers": ["view", "execute", "manage"],
     "mempalace": ["view", "manage"],
+    "heartbeats": ["view", "execute", "manage"],
+    "goals": ["view", "execute", "manage"],
+    "tickets": ["view", "execute", "manage"],
 }
 
 # Agent layer mapping (file-stem names)
@@ -165,6 +168,8 @@ BUILTIN_ROLES = {
             "tasks": ["view", "execute"],
             "triggers": ["view", "execute"],
             "mempalace": ["view"],
+            "heartbeats": ["view", "execute"],
+            "tickets": ["view", "execute"],
         },
     },
     "viewer": {
@@ -187,6 +192,8 @@ BUILTIN_ROLES = {
             "tasks": ["view"],
             "triggers": ["view"],
             "mempalace": ["view"],
+            "heartbeats": ["view"],
+            "tickets": ["view"],
         },
     },
 }
@@ -448,6 +455,413 @@ class Role(db.Model):
             "is_builtin": self.is_builtin,
             "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.created_at else None,
         }
+
+
+class Heartbeat(db.Model):
+    __tablename__ = "heartbeats"
+
+    id = db.Column(db.String(100), primary_key=True)  # slug: "atlas-4h"
+    agent = db.Column(db.String(100), nullable=False)
+    interval_seconds = db.Column(db.Integer, nullable=False)
+    max_turns = db.Column(db.Integer, nullable=False, default=10)
+    timeout_seconds = db.Column(db.Integer, nullable=False, default=600)
+    lock_timeout_seconds = db.Column(db.Integer, nullable=False, default=1800)
+    wake_triggers = db.Column(db.Text, nullable=False, default="[]")  # JSON array
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+    goal_id = db.Column(db.String(100), nullable=True)  # FK stub for Feature 1.2
+    required_secrets = db.Column(db.Text, nullable=True, default="[]")  # JSON array
+    decision_prompt = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    runs = db.relationship("HeartbeatRun", backref="heartbeat", lazy="dynamic", cascade="all, delete-orphan")
+    triggers = db.relationship("HeartbeatTriggerEvent", backref="heartbeat", lazy="dynamic", cascade="all, delete-orphan")
+
+    @property
+    def wake_triggers_list(self) -> list:
+        try:
+            return json.loads(self.wake_triggers) if self.wake_triggers else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @wake_triggers_list.setter
+    def wake_triggers_list(self, value: list):
+        self.wake_triggers = json.dumps(value)
+
+    @property
+    def required_secrets_list(self) -> list:
+        try:
+            return json.loads(self.required_secrets) if self.required_secrets else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @required_secrets_list.setter
+    def required_secrets_list(self, value: list):
+        self.required_secrets = json.dumps(value)
+
+    def to_dict(self):
+        last_run = self.runs.order_by(HeartbeatRun.started_at.desc()).first()
+        return {
+            "id": self.id,
+            "agent": self.agent,
+            "interval_seconds": self.interval_seconds,
+            "max_turns": self.max_turns,
+            "timeout_seconds": self.timeout_seconds,
+            "lock_timeout_seconds": self.lock_timeout_seconds,
+            "wake_triggers": self.wake_triggers_list,
+            "enabled": self.enabled,
+            "goal_id": self.goal_id,
+            "required_secrets": self.required_secrets_list,
+            "decision_prompt": self.decision_prompt,
+            "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.created_at else None,
+            "updated_at": self.updated_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.updated_at else None,
+            "last_run": last_run.to_dict() if last_run else None,
+            "run_count": self.runs.count(),
+        }
+
+
+class HeartbeatRun(db.Model):
+    __tablename__ = "heartbeat_runs"
+
+    run_id = db.Column(db.String(36), primary_key=True)  # uuid4
+    heartbeat_id = db.Column(db.String(100), db.ForeignKey("heartbeats.id", ondelete="CASCADE"), nullable=False)
+    trigger_id = db.Column(db.String(36), nullable=True)
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    ended_at = db.Column(db.DateTime, nullable=True)
+    duration_ms = db.Column(db.Integer, nullable=True)
+    tokens_in = db.Column(db.Integer, nullable=True)
+    tokens_out = db.Column(db.Integer, nullable=True)
+    cost_usd = db.Column(db.Float, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="running")  # running, success, fail, timeout, killed
+    prompt_preview = db.Column(db.Text, nullable=True)
+    error = db.Column(db.Text, nullable=True)
+    triggered_by = db.Column(db.String(50), nullable=True)  # interval, manual, new_task, mention, approval_decision
+
+    def to_dict(self):
+        return {
+            "run_id": self.run_id,
+            "heartbeat_id": self.heartbeat_id,
+            "trigger_id": self.trigger_id,
+            "started_at": self.started_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.started_at else None,
+            "ended_at": self.ended_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.ended_at else None,
+            "duration_ms": self.duration_ms,
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
+            "cost_usd": self.cost_usd,
+            "status": self.status,
+            "prompt_preview": self.prompt_preview,
+            "error": self.error,
+            "triggered_by": self.triggered_by,
+        }
+
+
+class HeartbeatTriggerEvent(db.Model):
+    __tablename__ = "heartbeat_triggers"
+
+    id = db.Column(db.String(36), primary_key=True)  # uuid4
+    heartbeat_id = db.Column(db.String(100), db.ForeignKey("heartbeats.id", ondelete="CASCADE"), nullable=False)
+    trigger_type = db.Column(db.String(50), nullable=False)  # interval, new_task, mention, manual, approval_decision
+    payload = db.Column(db.Text, nullable=True, default="{}")  # JSON
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    consumed_at = db.Column(db.DateTime, nullable=True)
+    coalesced_into = db.Column(db.String(36), nullable=True)  # trigger id that absorbed this (debounce)
+
+    @property
+    def payload_dict(self) -> dict:
+        try:
+            return json.loads(self.payload) if self.payload else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "heartbeat_id": self.heartbeat_id,
+            "trigger_type": self.trigger_type,
+            "payload": self.payload_dict,
+            "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.created_at else None,
+            "consumed_at": self.consumed_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.consumed_at else None,
+            "coalesced_into": self.coalesced_into,
+        }
+
+
+# --------------- Goal Cascade models (Feature 1.2) ---------------
+
+class Mission(db.Model):
+    __tablename__ = "missions"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    slug = db.Column(db.String(200), unique=True, nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    target_metric = db.Column(db.String(100))
+    target_value = db.Column(db.Float)
+    current_value = db.Column(db.Float, nullable=False, default=0)
+    due_date = db.Column(db.String(20))
+    status = db.Column(db.String(20), nullable=False, default="active")
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+
+    projects = db.relationship("GoalProject", backref="mission", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self, include_projects=False):
+        d = {
+            "id": self.id,
+            "slug": self.slug,
+            "title": self.title,
+            "description": self.description,
+            "target_metric": self.target_metric,
+            "target_value": self.target_value,
+            "current_value": self.current_value,
+            "due_date": self.due_date,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        if include_projects:
+            d["projects"] = [p.to_dict(include_goals=True) for p in self.projects]
+        return d
+
+
+class GoalProject(db.Model):
+    __tablename__ = "projects"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    slug = db.Column(db.String(200), unique=True, nullable=False)
+    mission_id = db.Column(db.Integer, db.ForeignKey("missions.id", ondelete="CASCADE"), nullable=True)
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    workspace_folder_path = db.Column(db.String(500))
+    status = db.Column(db.String(20), nullable=False, default="active")
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+
+    goals = db.relationship("Goal", backref="project", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self, include_goals=False):
+        d = {
+            "id": self.id,
+            "slug": self.slug,
+            "mission_id": self.mission_id,
+            "title": self.title,
+            "description": self.description,
+            "workspace_folder_path": self.workspace_folder_path,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        if include_goals:
+            d["goals"] = [g.to_dict(include_tasks=True) for g in self.goals]
+        return d
+
+
+class Goal(db.Model):
+    __tablename__ = "goals"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    slug = db.Column(db.String(200), unique=True, nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    target_metric = db.Column(db.String(100))
+    metric_type = db.Column(db.String(20), nullable=False, default="count")
+    target_value = db.Column(db.Float, nullable=False, default=1.0)
+    current_value = db.Column(db.Float, nullable=False, default=0.0)
+    due_date = db.Column(db.String(20))
+    status = db.Column(db.String(20), nullable=False, default="active")
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+
+    goal_tasks = db.relationship("GoalTask", backref="goal", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self, include_tasks=False):
+        d = {
+            "id": self.id,
+            "slug": self.slug,
+            "project_id": self.project_id,
+            "title": self.title,
+            "description": self.description,
+            "target_metric": self.target_metric,
+            "metric_type": self.metric_type,
+            "target_value": self.target_value,
+            "current_value": self.current_value,
+            "due_date": self.due_date,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        if include_tasks:
+            d["tasks"] = [t.to_dict() for t in self.goal_tasks]
+        return d
+
+
+class GoalTask(db.Model):
+    __tablename__ = "goal_tasks"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    goal_id = db.Column(db.Integer, db.ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    priority = db.Column(db.Integer, nullable=False, default=3)
+    assignee_agent = db.Column(db.String(100))
+    status = db.Column(db.String(20), nullable=False, default="open")
+    locked_at = db.Column(db.String(30))
+    locked_by = db.Column(db.String(100))
+    due_date = db.Column(db.String(20))
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "goal_id": self.goal_id,
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "assignee_agent": self.assignee_agent,
+            "status": self.status,
+            "locked_at": self.locked_at,
+            "locked_by": self.locked_by,
+            "due_date": self.due_date,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+# --------------- End Goal Cascade models ---------------
+
+
+# --------------- Tickets models (Feature 1.3) ---------------
+
+TICKET_STATUSES = ("open", "in_progress", "blocked", "review", "resolved", "closed")
+TICKET_PRIORITIES = ("urgent", "high", "medium", "low")
+PRIORITY_RANK = {"urgent": 4, "high": 3, "medium": 2, "low": 1}
+
+
+class Ticket(db.Model):
+    __tablename__ = "tickets"
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('open','in_progress','blocked','review','resolved','closed')",
+            name="ck_ticket_status",
+        ),
+        db.CheckConstraint(
+            "priority IN ('urgent','high','medium','low')",
+            name="ck_ticket_priority",
+        ),
+        db.CheckConstraint(
+            "(locked_at IS NULL AND locked_by IS NULL) OR (locked_at IS NOT NULL AND locked_by IS NOT NULL)",
+            name="ck_ticket_lock_consistency",
+        ),
+    )
+
+    id = db.Column(db.String(36), primary_key=True)  # uuid4
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="open")
+    priority = db.Column(db.String(10), nullable=False, default="medium")
+    priority_rank = db.Column(db.Integer, nullable=False, default=2)  # derived
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    goal_id = db.Column(db.Integer, db.ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
+    assignee_agent = db.Column(db.String(100), nullable=True)
+    locked_at = db.Column(db.String(30), nullable=True)
+    locked_by = db.Column(db.String(100), nullable=True)
+    lock_timeout_seconds = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(db.String(100), nullable=False, default="davidson")
+    source_agent = db.Column(db.String(100), nullable=True)
+    source_session_id = db.Column(db.String(36), nullable=True)
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+    resolved_at = db.Column(db.String(30), nullable=True)
+
+    comments = db.relationship("TicketComment", backref="ticket", lazy="dynamic", cascade="all, delete-orphan")
+    activity = db.relationship("TicketActivity", backref="ticket", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "status": self.status,
+            "priority": self.priority,
+            "priority_rank": self.priority_rank,
+            "project_id": self.project_id,
+            "goal_id": self.goal_id,
+            "assignee_agent": self.assignee_agent,
+            "locked_at": self.locked_at,
+            "locked_by": self.locked_by,
+            "lock_timeout_seconds": self.lock_timeout_seconds,
+            "created_by": self.created_by,
+            "source_agent": self.source_agent,
+            "source_session_id": self.source_session_id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "resolved_at": self.resolved_at,
+        }
+
+
+class TicketComment(db.Model):
+    __tablename__ = "ticket_comments"
+
+    id = db.Column(db.String(36), primary_key=True)  # uuid4
+    ticket_id = db.Column(db.String(36), db.ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    author = db.Column(db.String(100), nullable=False)  # 'davidson' | 'zara-cs' | ...
+    body = db.Column(db.Text, nullable=False)
+    mentions = db.Column(db.Text, nullable=True)  # JSON array of agent slugs
+    created_at = db.Column(db.String(30), nullable=False)
+
+    @property
+    def mentions_list(self) -> list:
+        try:
+            return json.loads(self.mentions) if self.mentions else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @mentions_list.setter
+    def mentions_list(self, value: list):
+        self.mentions = json.dumps(value)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "ticket_id": self.ticket_id,
+            "author": self.author,
+            "body": self.body,
+            "mentions": self.mentions_list,
+            "created_at": self.created_at,
+        }
+
+
+class TicketActivity(db.Model):
+    __tablename__ = "ticket_activity"
+
+    id = db.Column(db.String(36), primary_key=True)  # uuid4
+    ticket_id = db.Column(db.String(36), db.ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    actor = db.Column(db.String(100), nullable=False)
+    action = db.Column(db.String(50), nullable=False)  # created, status_changed, checkout, release, auto_release, assigned, commented, linked_session
+    payload = db.Column(db.Text, nullable=True)  # JSON
+
+    @property
+    def payload_dict(self) -> dict:
+        try:
+            return json.loads(self.payload) if self.payload else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    created_at = db.Column(db.String(30), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "ticket_id": self.ticket_id,
+            "actor": self.actor,
+            "action": self.action,
+            "payload": self.payload_dict,
+            "created_at": self.created_at,
+        }
+
+
+# --------------- End Tickets models ---------------
 
 
 def seed_roles():

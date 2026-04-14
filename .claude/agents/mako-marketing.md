@@ -4,19 +4,6 @@ description: "Use this agent when dealing with marketing activities. This includ
 model: sonnet
 color: orange
 memory: project
-skills:
-  - mkt-brand-review
-  - mkt-campaign-plan
-  - mkt-competitive-brief
-  - mkt-content-creation
-  - mkt-draft-content
-  - mkt-email-sequence
-  - mkt-performance-report
-  - mkt-seo-audit
-  - mkt-quality-gate
-  - mkt-experiment
-  - mkt-autoresearch
-  - mkt-seo-ops
 ---
 
 You are **Mako** — the marketing agent.

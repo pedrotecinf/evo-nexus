@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-04-14
+
+### Added
+
+- **Heartbeats — proactive agents with 9-step protocol** — agents wake on a schedule (interval, manual, new_task, mention, approval_decision), check state, and decide whether to act. Config in `config/heartbeats.yaml`, CRUD via `/scheduler` UI or `create-heartbeat` / `manage-heartbeats` skills. Atomic checkout prevents double-runs; janitor auto-releases stale locks. See `.claude/rules/heartbeats.md` and `docs/heartbeats.md`.
+- **Goal Cascade — Mission → Project → Goal → Task** — 4-level hierarchy with SQLite triggers that auto-progress goals when tasks are marked done. Goals support `count` / `currency` / `percentage` / `boolean` metric types. Context is auto-injected into agent prompts when `goal_id` is set on a routine, heartbeat, or ticket. UI at `/goals`. See `.claude/rules/goals.md` and `docs/goals.md`.
+- **Tickets — persistent work threads with atomic checkout** — assignable tickets with 6-state workflow (open → in_progress → blocked → review → resolved → closed), comments, activity log, `@agent-slug` mentions that wake heartbeats. Tickets feed the agent inbox in heartbeat step 3. UI at `/issues` with filters, search, bulk actions. See `.claude/rules/tickets.md` and `docs/tickets.md`.
+- **SDK client for internal API (`dashboard/backend/sdk_client.py`)** — `EvoClient` singleton that auto-resolves base URL from `EVONEXUS_API_URL` → `FLASK_PORT` → `localhost:8080` and auto-injects `Authorization: Bearer $DASHBOARD_API_TOKEN`. Skills use `from dashboard.backend.sdk_client import evo` instead of hardcoded curl — works in dev, nginx, and production without changes.
+- **Auto-bind session to created ticket** — when an agent creates a ticket inside a chat session, the terminal-server detects the POST `/api/tickets` response in tool_result output and auto-binds the ticket to the session. Chip in the chat header updates live via WebSocket `ticket_bound` event. Supports JSON and Python-repr output formats.
+- **Ticket source attribution** — `source_agent` and `source_session_id` columns on tickets. Terminal-server injects a `## Runtime context` block into the agent's system prompt with the current agent slug and session id; skills pass them through so the ticket records provenance. Timeline renders "created this ticket via @agent (session #xxxx)"; ticket header has a "Source" field.
+- **Slash-command autocomplete in chat** — typing `/` opens a popup filtered by substring match on skill name, with `↑↓` navigation, `Enter`/`Tab` to insert, `Esc` to close. Mirrors Claude Code terminal UX.
+- **7 new creation/management skills** — `create-ticket`, `create-goal`, `create-heartbeat`, `manage-heartbeats`, `create-agent`, `create-command`, `create-routine`, `schedule-task`, `trigger-registry`, `workspace-share`, `initial-setup` refactored to use `EvoClient`.
+- **19 engineering agents from oh-my-claudecode** — `apex-architect`, `bolt-executor`, `lens-reviewer`, `hawk-debugger`, `grid-tester`, `oath-verifier`, `compass-planner`, `raven-critic`, `zen-simplifier`, `vault-security`, `echo-analyst`, `trail-tracer`, `flow-git`, `scroll-docs`, `canvas-designer`, `prism-scientist`, `scout-explorer`, `probe-qa`, `quill-writer` + 2 native (`helm-conductor`, `mirror-retro`). Total agent count: 17 business + 21 engineering. See [NOTICE.md](./NOTICE.md).
+- **Sessions sidebar badge** — chat sessions bound to a ticket show a `🎫 #xxxxxxxx` chip next to the session name.
+
+### Changed
+
+- **Agents have no `skills:` frontmatter block** — all 38 agents see the full skill catalog dynamically. Adding a new skill no longer requires editing frontmatter across agents.
+- **Skill index auto-discovered** — `.claude/skills/CLAUDE.md` now lists 175+ skills organized by prefix (`dev-`, `fin-`, `hr-`, `int-`, `legal-`, `mkt-`, etc.).
+
+### Fixed
+
+- **`config/heartbeats.yaml` added to `.gitignore`** — user heartbeat config no longer accidentally committed.
+
 ## [0.20.6] - 2026-04-13
 
 ### Fixed

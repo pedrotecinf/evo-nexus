@@ -260,8 +260,21 @@ docker-run:         ## 🐳 Run routine manually (ex: make docker-run ADW=good_m
 docker-build:       ## 🐳 Build the image
 	docker compose build
 
+heartbeat-lint:     ## 🔍 Validate config/heartbeats.yaml against pydantic schema
+	@cd dashboard/backend && $(PYTHON) -c "\
+import sys; sys.path.insert(0, '.'); \
+from heartbeat_schema import load_heartbeats_yaml; \
+from pathlib import Path; \
+path = Path('../../config/heartbeats.yaml'); \
+cfg = load_heartbeats_yaml(path); \
+print(f'OK — {len(cfg.heartbeats)} heartbeat(s) validated'); \
+[print(f'  {h.id}: agent={h.agent} interval={h.interval_seconds}s enabled={h.enabled}') for h in cfg.heartbeats]"
+
+heartbeat-run:      ## ▶️  Run a heartbeat manually: make heartbeat-run ID=atlas-4h
+	@cd dashboard/backend && $(PYTHON) heartbeat_runner.py --heartbeat-id $(ID)
+
 help:               ## 📖 Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: morning eod memory memory-lint weekly run list-routines daily scheduler dashboard-app terminal-logs terminal-stop telegram telegram-stop telegram-attach discord-channel discord-channel-stop discord-channel-attach imessage imessage-stop imessage-attach backup backup-s3 restore backup-list backup-daily logs logs-detail logs-tail metrics clean-logs docker-dashboard docker-telegram docker-down docker-logs docker-run docker-build help docs-build setup team-strategy team-dashboard team-weekly learn-weekly
+.PHONY: morning eod memory memory-lint weekly run list-routines daily scheduler dashboard-app terminal-logs terminal-stop telegram telegram-stop telegram-attach discord-channel discord-channel-stop discord-channel-attach imessage imessage-stop imessage-attach backup backup-s3 restore backup-list backup-daily logs logs-detail logs-tail metrics clean-logs docker-dashboard docker-telegram docker-down docker-logs docker-run docker-build help docs-build setup team-strategy team-dashboard team-weekly learn-weekly heartbeat-lint heartbeat-run
 .DEFAULT_GOAL := help

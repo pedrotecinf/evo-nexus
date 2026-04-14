@@ -193,6 +193,7 @@ class TerminalServer {
             created: s.created,
             active: s.active,
             agentName: s.agentName,
+            ticketId: s.ticketId || null,
             lastActivity: lastMessageTs || (s.lastActivity ? new Date(s.lastActivity).getTime() : 0),
             preview,
             messageCount: Array.isArray(s.chatHistory) ? s.chatHistory.length : 0,
@@ -267,7 +268,20 @@ class TerminalServer {
         workingDir: session.workingDir,
         connectedClients: session.connections.size,
         lastActivity: session.lastActivity,
+        ticketId: session.ticketId || null,
       });
+    });
+
+    // Bind a session to a ticket (Feature 1.3 — session binding)
+    this.app.post('/api/sessions/:sessionId/ticket', (req, res) => {
+      const session = this.claudeSessions.get(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: 'Session not found' });
+      const { ticketId } = req.body || {};
+      // ticketId can be null to unbind
+      session.ticketId = ticketId || null;
+      session.lastActivity = new Date();
+      this.saveSessionsToDisk();
+      res.json({ success: true, sessionId: session.id, ticketId: session.ticketId });
     });
 
     this.app.delete('/api/sessions/:sessionId', (req, res) => {
@@ -425,6 +439,20 @@ class TerminalServer {
                     return; // Don't forward internal event
                   }
 
+                  // Auto-bind session to a ticket when the agent creates one.
+                  // Only binds if not already bound — doesn't overwrite user's manual pick.
+                  if (msg.type === 'ticket_detected' && msg.ticketId) {
+                    if (!chatSession.ticketId) {
+                      chatSession.ticketId = msg.ticketId;
+                      this.broadcastToSession(wsInfo.claudeSessionId, {
+                        type: 'ticket_bound',
+                        ticketId: msg.ticketId,
+                        auto: true,
+                      });
+                    }
+                    return;
+                  }
+
                   // Build assistant blocks for history
                   if (msg.type === 'text_start' || msg.type === 'message_start') {
                     if (!isStreaming) {
@@ -572,6 +600,7 @@ class TerminalServer {
       active: session.active,
       outputBuffer: session.outputBuffer.slice(-200),
       chatHistory,
+      ticketId: session.ticketId || null,
     });
 
     if (this.dev) console.log(`WebSocket ${wsId} joined session ${claudeSessionId}`);

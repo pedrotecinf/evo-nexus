@@ -28,6 +28,10 @@ import Workspace from './pages/Workspace'
 import Settings from './pages/Settings'
 import ShareView from './pages/ShareView'
 import ShareLinks from './pages/ShareLinks'
+import HeartbeatsList, { HeartbeatDetail } from './pages/Heartbeats'
+import Goals from './pages/Goals'
+import Issues from './pages/Issues'
+import TicketDetail from './pages/TicketDetail'
 
 function AppContent() {
   const location = useLocation()
@@ -99,6 +103,8 @@ function AppContent() {
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/scheduler" element={<Scheduler />} />
+          {hasPermission('heartbeats', 'view') && <Route path="/heartbeats" element={<HeartbeatsList />} />}
+          {hasPermission('heartbeats', 'view') && <Route path="/heartbeats/:id" element={<HeartbeatDetail />} />}
           <Route path="/memory" element={<Memory />} />
           <Route path="/mempalace" element={<MemPalace />} />
           <Route path="/systems" element={<Systems />} />
@@ -110,6 +116,9 @@ function AppContent() {
           {hasPermission('audit', 'view') && <Route path="/audit" element={<Audit />} />}
           {hasPermission('users', 'manage') && <Route path="/roles" element={<Roles />} />}
           {hasPermission('workspace', 'manage') && <Route path="/shares" element={<ShareLinks />} />}
+          <Route path="/goals" element={<Goals />} />
+          {hasPermission('tickets', 'view') && <Route path="/issues" element={<Issues />} />}
+          {hasPermission('tickets', 'view') && <Route path="/tickets/:id" element={<TicketDetail />} />}
         </Routes>
       </main>
     </div>

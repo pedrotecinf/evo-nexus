@@ -65,6 +65,87 @@ async function loadSDK() {
   return sdkModule;
 }
 
+/**
+ * Scan a tool_result text for a ticket-creation response.
+ * Returns the ticket id if a POST /api/tickets response is detected, else null.
+ * Heuristic: a JSON object with a UUID `id`, `status` in ticket statuses, and a `priority` field.
+ */
+const TICKET_STATUSES = new Set(['open', 'in_progress', 'blocked', 'review', 'resolved', 'closed']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function _looksLikeTicket(obj) {
+  return (
+    obj &&
+    typeof obj.id === 'string' &&
+    UUID_RE.test(obj.id) &&
+    typeof obj.status === 'string' &&
+    TICKET_STATUSES.has(obj.status) &&
+    typeof obj.priority === 'string' &&
+    Object.prototype.hasOwnProperty.call(obj, 'title')
+  );
+}
+
+// Scan `text` for balanced {...} JSON objects and try to parse each.
+function _extractJsonObjects(text) {
+  const results = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          results.push(text.slice(i, j + 1));
+          i = j;
+          break;
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// Regex fallback — works for both JSON ("id":"...") and Python repr ('id': '...')
+// and extracts a plausible ticket id when the structure has the expected fields.
+function _regexScanForTicket(text) {
+  const hasIdPriorityStatus =
+    /["']id["']\s*:\s*["']([0-9a-f-]{36})["']/i.test(text) &&
+    /["']priority["']\s*:\s*["'](urgent|high|medium|low)["']/i.test(text) &&
+    /["']status["']\s*:\s*["'](open|in_progress|blocked|review|resolved|closed)["']/i.test(text) &&
+    /["']title["']\s*:/i.test(text);
+  if (!hasIdPriorityStatus) return null;
+  const m = text.match(/["']id["']\s*:\s*["']([0-9a-f-]{36})["']/i);
+  return m && UUID_RE.test(m[1]) ? m[1] : null;
+}
+
+function detectCreatedTicketId(text) {
+  if (!text || typeof text !== 'string') return null;
+  const hasIdKey = text.includes('"id"') || text.includes("'id'");
+  const hasPriorityKey = text.includes('"priority"') || text.includes("'priority'");
+  if (!hasIdKey || !hasPriorityKey) return null;
+  // First: strict JSON parse attempts.
+  for (const candidate of _extractJsonObjects(text)) {
+    try {
+      const obj = JSON.parse(candidate);
+      if (_looksLikeTicket(obj)) return obj.id;
+    } catch {}
+  }
+  try {
+    const obj = JSON.parse(text.trim());
+    if (_looksLikeTicket(obj)) return obj.id;
+  } catch {}
+  // Fallback: regex scan — handles Python repr output (single quotes).
+  return _regexScanForTicket(text);
+}
+
 class ChatBridge {
   constructor() {
     this.sessions = new Map(); // sessionId -> { query, abortController, active, sdkSessionId }
@@ -100,11 +181,25 @@ class ChatBridge {
     if (agentName) {
       const agentDef = loadAgentFile(agentName, queryOptions.cwd);
       if (agentDef) {
+        // Build runtime context block for ticket source attribution
+        const runtimeLines = [
+          '## Runtime context',
+          'You are running inside the EvoNexus dashboard.',
+        ];
+        if (agentName) {
+          runtimeLines.push(`- Current agent slug: ${agentName}`);
+        }
+        runtimeLines.push(`- Current chat session id: ${sessionId}`);
+        runtimeLines.push('');
+        runtimeLines.push('When you create a ticket via `evo.post("/api/tickets", {...})`, include `source_agent: "' + agentName + '"` and `source_session_id: "' + sessionId + '"` in the payload so the ticket records who created it.');
+
+        const runtimeBlock = runtimeLines.join('\n');
+
         // Use systemPrompt with claude_code preset + agent prompt appended
         queryOptions.systemPrompt = {
           type: 'preset',
           preset: 'claude_code',
-          append: agentDef.prompt,
+          append: agentDef.prompt + '\n\n' + runtimeBlock,
         };
         if (agentDef.model) queryOptions.model = agentDef.model;
         console.log(`[chat-bridge] Loaded agent "${agentName}" via systemPrompt.append (${agentDef.prompt.length} chars, model: ${agentDef.model || 'inherit'})`);
@@ -180,6 +275,26 @@ class ChatBridge {
             session.sdkSessionId = message.session_id;
             if (onMessage) {
               onMessage({ type: 'session_id', sdkSessionId: message.session_id });
+            }
+          }
+
+          // Auto-detect ticket creation in tool_result blocks.
+          if (message.type === 'user') {
+            const content = message.message?.content || message.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type !== 'tool_result') continue;
+                const raw = Array.isArray(block.content)
+                  ? block.content.map(c => (typeof c === 'string' ? c : c?.text || '')).join('\n')
+                  : (typeof block.content === 'string' ? block.content : '');
+                const ticketId = detectCreatedTicketId(raw);
+                if (ticketId) {
+                  console.log(`[chat-bridge] ✓ Detected ticket creation: ${ticketId} — auto-binding to session ${sessionId}`);
+                  if (onMessage) {
+                    onMessage({ type: 'ticket_detected', ticketId });
+                  }
+                }
+              }
             }
           }
 

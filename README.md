@@ -55,6 +55,9 @@ It turns a single CLI installation into a team of **38 specialized agents** orga
 - **Persistent Memory** — two-tier system (CLAUDE.md + memory/) with LLM Wiki pattern: ingest propagation, weekly lint, centralized index, and operation log
 - **Knowledge Base** — optional semantic search via [MemPalace](https://github.com/milla-jovovich/mempalace) (local ChromaDB vectors, one-click install)
 - **Full Observability** — JSONL logs, execution metrics, cost tracking per routine
+- **Heartbeats (Phase 1)** — proactive agents that wake on a schedule, run a 9-step protocol, and decide whether to act
+- **Goal Cascade (Phase 1)** — Mission → Project → Goal → Task hierarchy. Link any routine/heartbeat/ticket to a goal; agents receive the chain as prompt context
+- **Tickets (Phase 1)** — persistent conversation/work threads with atomic checkout (`UPDATE WHERE locked_at IS NULL`), 6-state workflow, mention-based wake triggers, global `/issues` page
 
 ---
 

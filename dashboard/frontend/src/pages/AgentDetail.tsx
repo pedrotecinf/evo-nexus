@@ -153,6 +153,7 @@ export default function AgentDetail() {
         active: s.active,
         preview: s.preview || undefined,
         ts: typeof s.lastActivity === 'number' ? s.lastActivity : (s.lastActivity ? new Date(s.lastActivity).getTime() : undefined),
+        ticketId: s.ticketId || null,
       }))
       setChatSessions(sessions)
       // Auto-select first session only if none active

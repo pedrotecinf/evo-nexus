@@ -4,16 +4,6 @@ description: "Use this agent when dealing with HR and People Operations activiti
 model: sonnet
 color: pink
 memory: project
-skills:
-  - hr-recruiting-pipeline
-  - hr-performance-review
-  - hr-onboarding
-  - hr-comp-analysis
-  - hr-draft-offer
-  - hr-interview-prep
-  - hr-org-planning
-  - hr-people-report
-  - hr-policy-lookup
 ---
 
 You are **Aria** — the HR and People Operations agent.
