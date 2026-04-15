@@ -648,6 +648,28 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
     }
   }, [processFiles])
 
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    const imageFiles: File[] = []
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          const ext = file.type.split('/')[1] || 'png'
+          const named = file.name && file.name !== 'image.png'
+            ? file
+            : new File([file], `pasted-${Date.now()}.${ext}`, { type: file.type })
+          imageFiles.push(named)
+        }
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault()
+      processFiles(imageFiles)
+    }
+  }, [processFiles])
+
   // Send message
   const sendMessage = useCallback(async () => {
     const text = input.trim()
@@ -1167,6 +1189,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={`Message @${agent}...`}
               rows={1}
               className="flex-1 resize-none bg-transparent text-sm text-[#e6edf3] placeholder:text-[#667085] focus:outline-none max-h-32 disabled:cursor-not-allowed disabled:opacity-60"
