@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.1] - 2026-04-16
+
+### Fixed
+
+- **Installer clone is ~10x faster** — `npx @evoapi/evo-nexus` now performs a shallow clone (`--depth=1`), cutting the download from ~454 MiB of pack data to roughly 30–50 MiB. The repo history carries ~272 MiB of superseded avatar PNGs that end users don't need for installation. Update path also switched to `git fetch --depth=1` + `git merge --ff-only origin/<branch>` to stay shallow-safe across updates while still surfacing conflicts on local modifications instead of silently discarding them.
+
 ## [0.23.0] - 2026-04-15
 
 ### Added

@@ -153,12 +153,12 @@ async function main() {
     try { run("pkill -f 'terminal-server/bin/server.js' 2>/dev/null || true", { cwd: targetPath }); } catch {}
     try { run("pkill -f 'app.py' 2>/dev/null || true", { cwd: targetPath }); } catch {}
 
-    // Pull latest
+    // Pull latest (shallow-safe)
     console.log(`\n  ${BOLD}Pulling latest changes...${RESET}\n`);
-    run("git fetch origin", { cwd: targetPath });
     // Detect current branch
     const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: targetPath, encoding: "utf-8" }).trim();
-    run(`git pull origin ${branch}`, { cwd: targetPath });
+    run(`git fetch --depth=1 origin ${branch}`, { cwd: targetPath });
+    run(`git merge --ff-only origin/${branch}`, { cwd: targetPath });
 
     // Show new version
     try {
@@ -181,7 +181,7 @@ async function main() {
       }
     }
     console.log(`  ${BOLD}Cloning EvoNexus into current directory...${RESET}\n`);
-    run(`git clone ${REPO} .`, { cwd: targetPath });
+    run(`git clone --depth=1 ${REPO} .`, { cwd: targetPath });
     console.log();
   } else if (existsSync(targetPath)) {
     const answer = await ask(`${YELLOW}Directory '${targetDir}' already exists. Continue anyway? [y/N]: ${RESET}`);
@@ -191,7 +191,7 @@ async function main() {
     }
   } else {
     console.log(`  ${BOLD}Cloning EvoNexus...${RESET}\n`);
-    run(`git clone ${REPO} "${targetPath}"`);
+    run(`git clone --depth=1 ${REPO} "${targetPath}"`);
     console.log();
   }
 
