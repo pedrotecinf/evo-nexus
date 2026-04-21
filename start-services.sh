@@ -1,23 +1,23 @@
 #!/bin/bash
+
 # Self-discovering launcher for the EvoNexus dashboard, scheduler, and
 # terminal-server. Resolves SCRIPT_DIR at runtime (instead of hard-coding
-# /home/evonexus/evo-nexus) so the same file works regardless of which
-# user owns the install or where it lives — required for setups where
-# the operator ran the wizard from /root/* (with SUDO_USER=ubuntu) and
-# the install ended up under /home/ubuntu/evo-nexus, or any other path.
-#
-# Invoked by:
-#   • the systemd unit (`ExecStart=/bin/bash <install_dir>/start-services.sh`)
-#   • Makefile targets (`make dashboard-app`)
-#   • operators running it manually after a reboot
+# an absolute path) so the same file works regardless of which user owns
+# the install or where it lives.
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin"
+
+# Ensure common user-local bin dirs are visible (openclaude/opencode may live there)
+export PATH="/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.opencode/bin"
+
 cd "$SCRIPT_DIR" || exit 1
 
 # Load environment variables
 if [ -f .env ]; then
   set -a
+  # shellcheck disable=SC1091
   source .env
   set +a
 fi
@@ -26,9 +26,9 @@ fi
 mkdir -p "$SCRIPT_DIR/logs"
 
 # Kill existing services (including scheduler)
-pkill -f 'terminal-server/bin/server.js' 2>/dev/null
-pkill -f 'python.*app.py' 2>/dev/null
-pkill -f 'python.*scheduler.py' 2>/dev/null
+pkill -f 'terminal-server/bin/server.js' 2>/dev/null || true
+pkill -f 'dashboard/backend.*app.py' 2>/dev/null || true
+pkill -f 'scheduler.py' 2>/dev/null || true
 sleep 1
 
 # Start terminal-server (must run FROM the project root for agent discovery)
