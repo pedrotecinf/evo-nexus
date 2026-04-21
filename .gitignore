@@ -114,3 +114,14 @@ site/lib/
 mempalace.yaml
 entities.json
 .claude/worktrees/
+.codex
+.codex/
+logs/
+community/
+courses/
+daily-logs/
+finance/
+meetings/
+projects/
+social/
+strategy/
