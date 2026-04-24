@@ -74,6 +74,17 @@ export default function AgentDetail() {
   const [chatConnecting, setChatConnecting] = useState(false)
   const [activeProviderCli, setActiveProviderCli] = useState<string>('claude')
 
+  // Agent Chat enable/disable (user-controlled). Historically chat was disabled
+  // for non-native providers due to instability; keep a quick toggle.
+  const [chatEnabled, setChatEnabled] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem('evo:agent-chat-enabled')
+      return v === null ? true : v === '1'
+    } catch {
+      return true
+    }
+  })
+
   // Notification badge state — pending approvals per session
   const approvalCountsRef = useRef<Map<string, number>>(new Map())
   const [totalPending, setTotalPending] = useState(0)
@@ -117,7 +128,8 @@ export default function AgentDetail() {
     return () => { cancelled = true }
   }, [])
 
-  const chatSupported = activeProviderCli === 'claude'
+  const usingNativeClaude = activeProviderCli === 'claude'
+  const chatSupported = chatEnabled
 
   useEffect(() => {
     if (!chatSupported && viewMode === 'chat') {
@@ -556,7 +568,7 @@ export default function AgentDetail() {
                     ? 'text-[#e6edf3] bg-[#0C111D]'
                     : 'text-[#667085] hover:text-[#e6edf3] hover:bg-[#161b22]'
                 } ${!chatSupported ? 'opacity-40 cursor-not-allowed' : ''}`}
-                title={chatSupported ? 'Chat' : 'Chat de agentes disponível apenas com Claude nativo no estado atual'}
+                title={chatSupported ? 'Chat' : 'Chat desativado (toggle)'}
               >
                 <MessageSquare size={12} style={{ color: viewMode === 'chat' ? agentColor : undefined }} />
                 Chat
@@ -613,11 +625,33 @@ export default function AgentDetail() {
               </div>
             )}
 
-            {!chatSupported && (
-              <div className="ml-auto px-3 text-[10px] uppercase tracking-[0.12em] text-[#667085]">
-                Chat indisponível com provider OAuth
-              </div>
-            )}
+            <div className="ml-auto flex items-center gap-2 px-3">
+              {!usingNativeClaude && (
+                <div className="px-2 py-0.5 rounded bg-[#152030] text-[10px] uppercase tracking-[0.12em] text-[#667085] border border-[#1e2a3a]">
+                  Chat experimental ({activeProviderCli})
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !chatEnabled
+                  setChatEnabled(next)
+                  try { localStorage.setItem('evo:agent-chat-enabled', next ? '1' : '0') } catch {}
+                  if (!next && viewMode === 'chat') {
+                    setViewMode('terminal')
+                    try { localStorage.setItem('evo:agent-view-mode', 'terminal') } catch {}
+                  }
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-[0.12em] border transition-colors ${
+                  chatEnabled
+                    ? 'bg-[#00FFA7]/10 text-[#00FFA7] border-[#00FFA7]/20 hover:bg-[#00FFA7]/15'
+                    : 'bg-[#1a0a0a] text-[#f87171] border-[#3a1515] hover:bg-[#2a1010]'
+                }`}
+                title={chatEnabled ? 'Desativar chat' : 'Ativar chat'}
+              >
+                {chatEnabled ? 'Chat ON' : 'Chat OFF'}
+              </button>
+            </div>
           </div>
 
           {/* Content */}
@@ -632,6 +666,7 @@ export default function AgentDetail() {
                 externalError={chatConnectError}
                 onPendingCountChange={handlePendingCountChange}
                 onNeedsAttention={handleNeedsAttention}
+                providerCli={activeProviderCli}
               />
             ) : (
               termTabs.length === 0 || activeTermTab === null ? (

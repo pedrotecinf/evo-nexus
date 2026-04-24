@@ -47,6 +47,7 @@ interface AgentChatProps {
   workingDir?: string
   threadTicketId?: string
   onTurnCompleted?: () => void
+  providerCli?: string
 }
 
 // Terminal-server URL
@@ -78,7 +79,19 @@ type AssistantBlock =
 
 type Status = 'idle' | 'connecting' | 'running' | 'error'
 
-export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', externalLoading = false, externalError = null, onPendingCountChange, onNeedsAttention, workingDir: _workingDir, threadTicketId: _threadTicketId, onTurnCompleted }: AgentChatProps) {
+export default function AgentChat({
+  agent,
+  sessionId,
+  accentColor = '#00FFA7',
+  externalLoading = false,
+  externalError = null,
+  onPendingCountChange,
+  onNeedsAttention,
+  workingDir: _workingDir,
+  threadTicketId: _threadTicketId,
+  onTurnCompleted,
+  providerCli,
+}: AgentChatProps) {
   const { dismissBySession } = useNotifications()
   const toast = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -910,6 +923,13 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {/* Provider note */}
+      {providerCli === 'opencode' && (
+        <div className={`mx-4 ${sessionId ? 'mt-12' : 'mt-3'} mb-2 rounded-lg border border-[#2e3a4a] bg-[#0b1018] px-3 py-2 text-[11px] text-[#8a9aae]`}>
+          <span className="font-semibold text-[#e6edf3]">Chat (opencode)</span>: ferramentas rodam automaticamente (sem cards de aprovação) e a primeira resposta pode demorar alguns segundos.
+        </div>
+      )}
+
       {/* Corner status indicator */}
       {(isConnecting || effectiveError) && (
         <div
