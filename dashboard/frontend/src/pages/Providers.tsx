@@ -15,7 +15,7 @@ interface Provider {
 
 interface ProvidersResponse {
   providers: Provider[]; active_provider: string
-  claude_installed: boolean; openclaude_installed: boolean
+  claude_installed: boolean; openclaude_installed: boolean; opencode_installed?: boolean
 }
 
 const ENV_VAR_LABELS: Record<string, string> = {
@@ -185,6 +185,7 @@ export default function Providers() {
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({})
   const [claudeInstalled, setClaudeInstalled] = useState(false)
   const [openclaudeInstalled, setOpenclaudeInstalled] = useState(false)
+  const [opencodeInstalled, setOpencodeInstalled] = useState(false)
   const [codexAuth, setCodexAuth] = useState<{ authenticated: boolean; method?: string } | null>(null)
   const [authModal, setAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState<'browser' | 'device'>('browser')
@@ -214,6 +215,7 @@ export default function Providers() {
       setActiveProvider(data.active_provider || 'none')
       setClaudeInstalled(data.claude_installed)
       setOpenclaudeInstalled(data.openclaude_installed)
+      setOpencodeInstalled(Boolean(data.opencode_installed))
     }).catch(() => setProviders([])).finally(() => setLoading(false))
   }
 
@@ -376,6 +378,10 @@ export default function Providers() {
               <span className={`w-1.5 h-1.5 rounded-full ${openclaudeInstalled ? 'bg-[#00FFA7]' : 'bg-[#5a6b7f]'}`} />
               openclaude {openclaudeInstalled ? '' : '(missing)'}
             </span>
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${opencodeInstalled ? 'bg-[#00FFA7]' : 'bg-[#5a6b7f]'}`} />
+              opencode {opencodeInstalled ? '' : '(missing)'}
+            </span>
           </div>
           <div className="ml-auto flex items-center gap-4 text-[11px] tracking-wide uppercase text-[#5a6b7f]">
             <span>{providers.length} available</span>
@@ -396,7 +402,13 @@ export default function Providers() {
         <div className="space-y-2">
           {providers.map((prov) => {
             const color = PROVIDER_COLORS[prov.id] || '#5a6b7f'
-            const isInstalled = prov.cli_command === 'claude' ? claudeInstalled : openclaudeInstalled
+            const isInstalled = prov.cli_command === 'claude'
+              ? claudeInstalled
+              : prov.cli_command === 'openclaude'
+                ? openclaudeInstalled
+                : prov.cli_command === 'opencode'
+                  ? opencodeInstalled
+                  : false
             const isActive = prov.is_active && activeProvider === prov.id
 
             return (
