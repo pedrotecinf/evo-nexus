@@ -184,8 +184,10 @@ class ClaudeBridge {
       // Claude/OpenClaude block this flag for root users.
       // The trust prompt is auto-accepted via PTY detection below instead.
       const isRoot = process.getuid && process.getuid() === 0;
-      const args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
-      if (providerConfig.cli_command !== 'opencode' && agent) {
+      let args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
+      if (providerConfig.cli_command === 'opencode') {
+        args = [];
+      } else if (agent) {
         args.push('--agent', agent);
       }
 
@@ -349,7 +351,9 @@ class ClaudeBridge {
         onOutput(data);
       });
 
-      claudeProcess.onExit((exitCode, signal) => {
+      claudeProcess.onExit((evt) => {
+        const exitCode = typeof evt === 'object' && evt ? evt.exitCode : evt;
+        const signal = typeof evt === 'object' && evt ? evt.signal : null;
         console.log(`Claude session ${sessionId} exited with code ${exitCode}, signal ${signal}`);
         // Clear kill timeout if process exited naturally
         if (session.killTimeout) {
@@ -362,6 +366,14 @@ class ClaudeBridge {
       });
 
       claudeProcess.on('error', (error) => {
+        const message = error?.message || String(error);
+        if (session.cli === 'opencode' && (error?.code === 'EIO' || message.includes('read EIO'))) {
+          session.active = false;
+          this.sessions.delete(sessionId);
+          onExit(0, null);
+          return;
+        }
+
         console.error(`Claude session ${sessionId} error:`, error);
         // Clear kill timeout if process errored
         if (session.killTimeout) {
