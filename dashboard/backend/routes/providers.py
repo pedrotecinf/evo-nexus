@@ -32,7 +32,7 @@ OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CODEX_AUTH_FILE = Path.home() / ".codex" / "auth.json"
 
 # Allowlisted CLI commands — only these binaries can be spawned
-ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude"})
+ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude", "opencode"})
 
 # Allowlisted env var names — only these can be injected into subprocess
 ALLOWED_ENV_VARS = frozenset({
@@ -56,6 +56,7 @@ ALLOWED_ENV_VARS = frozenset({
 })
 
 _CLI_SEARCH_DIRS = (
+    str(Path.home() / ".opencode" / "bin"),
     str(Path.home() / ".local" / "bin"),
     str(Path.home() / ".npm-global" / "bin"),
     "/usr/local/bin",
@@ -135,6 +136,8 @@ def _run_cli_version(command: str, env: dict | None = None) -> dict:
             result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
         elif resolved and command == "claude":
             result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
+        elif resolved and command == "opencode":
+            result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
         else:
             return {"installed": False, "version": None, "path": None}
 
@@ -213,16 +216,22 @@ def list_providers():
     active = config.get("active_provider", "anthropic")
     providers = config.get("providers", {})
 
-    # Check CLI installation status for both binaries
+    # Check CLI installation status for all supported binaries
     claude_status = _check_cli("claude")
     openclaude_status = _check_cli("openclaude")
+    opencode_status = _check_cli("opencode")
 
     result = []
     for key, prov in providers.items():
         cli = prov.get("cli_command", "claude")
         if cli not in ALLOWED_CLI_COMMANDS:
             continue
-        cli_status = claude_status if cli == "claude" else openclaude_status
+        if cli == "claude":
+            cli_status = claude_status
+        elif cli == "openclaude":
+            cli_status = openclaude_status
+        else:
+            cli_status = opencode_status
 
         # Mask env var values for API response
         env_vars = prov.get("env_vars", {})
@@ -263,6 +272,7 @@ def list_providers():
         "active_provider": active,
         "claude_installed": claude_status["installed"],
         "openclaude_installed": openclaude_status["installed"],
+        "opencode_installed": opencode_status["installed"],
     })
 
 
@@ -373,10 +383,14 @@ def test_provider(provider_id):
 
     resolved_cli = _resolve_cli_path(cli)
     if not resolved_cli:
+        if cli == "opencode":
+            hint = "Install OpenCode (opencode) and ensure 'opencode' is on PATH"
+        else:
+            hint = f"npm install -g {'@gitlawb/openclaude' if cli == 'openclaude' else '@anthropic-ai/claude-code'}"
         return jsonify({
             "success": False,
             "error": f"'{cli}' not found in PATH",
-            "hint": f"npm install -g {'@gitlawb/openclaude' if cli == 'openclaude' else '@anthropic-ai/claude-code'}",
+            "hint": hint,
         })
 
     # Build env with sanitized provider vars
