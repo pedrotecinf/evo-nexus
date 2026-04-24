@@ -57,6 +57,9 @@ function resolveProviderModel(providerConfig) {
 function getProviderMode(providerConfig) {
   const active = providerConfig?.active || 'anthropic';
   if (active === 'anthropic') return 'anthropic';
+  // OpenCode runs as a local interactive CLI and does not require an API model.
+  // Treat it as "code" so the terminal bridge doesn't block it.
+  if (providerConfig?.cli_command === 'opencode') return 'code';
   const model = resolveProviderModel(providerConfig);
   if (isCodeModel(model)) return 'code';
   return 'chat';

@@ -332,6 +332,12 @@ class ChatBridge {
     } = options;
 
     const providerConfig = loadProviderConfig();
+    // OpenCode is a local CLI (not Chat Completions). When it's the active CLI,
+    // route the chat session to the PTY-backed OpenCode runner.
+    if (providerConfig.cli_command === 'opencode') {
+      return this._startOpenCodeSession(sessionId, options);
+    }
+    // Non-Anthropic providers run via OpenAI-compatible Chat Completions.
     if (providerConfig.active !== 'anthropic') {
       return this._startOpenAICompatibleSession(sessionId, options, providerConfig);
     }
