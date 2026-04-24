@@ -4,7 +4,7 @@ const path = require('path');
 const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..', '..');
 const PROVIDERS_PATH = path.join(WORKSPACE_ROOT, 'config', 'providers.json');
 
-const ALLOWED_CLI = new Set(['claude', 'openclaude']);
+const ALLOWED_CLI = new Set(['claude', 'openclaude', 'opencode']);
 const ALLOWED_ENV_VARS = new Set([
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_USE_OPENAI',
@@ -103,4 +103,3 @@ module.exports = {
   isCodeModel,
   isChatCompletionModel,
 };
-
