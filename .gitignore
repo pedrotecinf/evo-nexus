@@ -113,6 +113,9 @@ site/lib/
 # ── User-specific data ───────────
 mempalace.yaml
 entities.json
+.opencode/
+graphify-out/
+AGENTS.md
 .claude/worktrees/
 .worktrees/
 .codex
