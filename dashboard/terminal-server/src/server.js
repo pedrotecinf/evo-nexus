@@ -156,6 +156,7 @@ class TerminalServer {
         connections: new Set(),
         outputBuffer: [],
         maxBufferSize: 1000,
+        disconnectStopTimer: null,
       };
       this.claudeSessions.set(sessionId, session);
       this.saveSessionsToDisk();
@@ -250,6 +251,7 @@ class TerminalServer {
         connections: new Set(),
         outputBuffer: [],
         maxBufferSize: 1000,
+        disconnectStopTimer: null,
       };
       this.claudeSessions.set(sessionId, session);
       this.saveSessionsToDisk();
@@ -468,6 +470,10 @@ class TerminalServer {
         if (wsInfo.claudeSessionId) {
           const chatSession = this.claudeSessions.get(wsInfo.claudeSessionId);
           if (chatSession && data.prompt) {
+            if (this.dev || process.env.OPENCODE_DEBUG) {
+              const plen = typeof data.prompt === 'string' ? data.prompt.length : 0;
+              console.log(`[chat_send] session=${wsInfo.claudeSessionId} agent=${chatSession.agentName || 'unknown'} promptLen=${plen}`);
+            }
             chatSession.mode = 'chat';
             chatSession.active = true;
             chatSession.lastActivity = new Date();
@@ -541,6 +547,9 @@ class TerminalServer {
                 sdkSessionId: chatSession.sdkSessionId || undefined,
                 systemPromptExtras: chatSession.systemPromptExtras || undefined,
                 onMessage: (msg) => {
+                  if ((this.dev || process.env.OPENCODE_DEBUG) && msg?.type === 'text_delta') {
+                    console.log(`[chat_send] text_delta (${wsInfo.claudeSessionId}) +${(msg.text || '').length} chars`);
+                  }
                   // Track SDK session ID
                   if (msg.type === 'session_id' && msg.sdkSessionId) {
                     chatSession.sdkSessionId = msg.sdkSessionId;
@@ -737,6 +746,12 @@ class TerminalServer {
     session.lastActivity = new Date();
     session.lastAccessed = Date.now();
 
+    // If a chat session was scheduled to stop due to disconnect, cancel it.
+    if (session.disconnectStopTimer) {
+      try { clearTimeout(session.disconnectStopTimer); } catch {}
+      session.disconnectStopTimer = null;
+    }
+
     // Restore chat history from JSONL logs if session cache is empty
     let chatHistory = session.chatHistory || [];
     if (chatHistory.length === 0 && session.agentName && session.mode === 'chat') {
@@ -898,8 +913,25 @@ class TerminalServer {
       if (session) {
         session.connections.delete(wsId);
         session.lastActivity = new Date();
-        if (session.connections.size === 0 && this.dev) {
-          console.log(`No more connections to session ${wsInfo.claudeSessionId}`);
+        if (session.connections.size === 0) {
+          if (this.dev) console.log(`No more connections to session ${wsInfo.claudeSessionId}`);
+
+          // In chat mode, stop the underlying agent after a grace period to
+          // avoid leaving long-running processes orphaned when the user
+          // reloads/closes the tab.
+          if (session.mode === 'chat' && session.active) {
+            // Allow enough time for quick reloads.
+            session.disconnectStopTimer = setTimeout(async () => {
+              const s = this.claudeSessions.get(wsInfo.claudeSessionId);
+              if (!s || s.connections.size > 0) return;
+              try {
+                await this.chatBridge.stopSession(wsInfo.claudeSessionId);
+              } catch {}
+              try { s.active = false; } catch {}
+              s.disconnectStopTimer = null;
+              if (this.dev) console.log(`[chat_send] stopped session after disconnect grace: ${wsInfo.claudeSessionId}`);
+            }, 120000);
+          }
         }
       }
     }
@@ -917,6 +949,11 @@ class TerminalServer {
     for (const [sessionId, session] of this.claudeSessions.entries()) {
       if (session.active) this.claudeBridge.stopSession(sessionId);
     }
+
+     // Stop any active chat sessions (SDK or opencode-backed).
+     for (const [sessionId] of this.chatBridge.sessions.entries()) {
+       try { this.chatBridge.stopSession(sessionId); } catch {}
+     }
 
     this.claudeSessions.clear();
     this.webSocketConnections.clear();

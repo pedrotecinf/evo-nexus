@@ -186,26 +186,7 @@ class ChatBridge {
     this.sessions = new Map(); // sessionId -> { query, abortController, active, sdkSessionId }
   }
 
-  _buildChatCompletionSystemPrompt(agentName, cwd, sessionId) {
-    const lines = [
-      'You are running inside EvoNexus dashboard chat.',
-      `Current chat session id: ${sessionId}`,
-    ];
-    if (agentName) lines.push(`Current agent slug: ${agentName}`);
-    if (agentName) {
-      const agentDef = loadAgentFile(agentName, cwd);
-      if (agentDef?.prompt) {
-        lines.push('');
-        lines.push('Follow this agent persona strictly:');
-        lines.push(agentDef.prompt);
-      }
-    }
-    lines.push('');
-    lines.push('If this model does not support tool calling, answer directly with best effort.');
-    return lines.join('\n');
-  }
-
-  _extractChatDeltaText(delta) {
+  _stripAnsi(s) {
     if (!delta) return '';
     if (typeof delta.content === 'string') return delta.content;
     if (Array.isArray(delta.content)) {
@@ -614,6 +595,15 @@ class ChatBridge {
     try {
       session.abortController.abort();
     } catch {}
+
+    // If this is an opencode-backed chat, also terminate the pty.
+    if (session.mode === 'opencode' && session.pty) {
+      try { session.pty.kill(); } catch {}
+    }
+
+    if (session.tmpDir) {
+      await this._rmrfSafe(session.tmpDir);
+    }
     this.sessions.delete(sessionId);
     return { sdkSessionId };
   }
