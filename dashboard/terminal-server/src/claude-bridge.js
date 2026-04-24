@@ -15,6 +15,7 @@ class ClaudeBridge {
   buildCliPath(basePath = '') {
     const home = process.env.HOME || '/';
     const extraPaths = [
+      path.join(home, '.opencode', 'bin'),
       path.join(home, '.local', 'bin'),
       path.join(home, '.npm-global', 'bin'),
       '/usr/local/bin',
@@ -53,6 +54,12 @@ class ClaudeBridge {
           stdio: ['pipe', 'pipe', 'ignore'],
           env: { ...process.env, PATH: resolvedPath }
         }).trim();
+      } else if (cliCommand === 'opencode') {
+        resolved = execSync('which opencode', {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'ignore'],
+          env: { ...process.env, PATH: resolvedPath }
+        }).trim();
       } else {
         resolved = execSync('which claude', {
           encoding: 'utf8',
@@ -70,20 +77,31 @@ class ClaudeBridge {
 
     // Fallback: check common hardcoded paths
     const home = process.env.HOME || '/';
-    const paths = cliCommand === 'openclaude'
-      ? [
-          path.join(home, '.local', 'bin', 'openclaude'),
-          path.join(home, '.npm-global', 'bin', 'openclaude'),
-          '/usr/local/bin/openclaude',
-          '/usr/bin/openclaude',
-        ]
-      : [
-          path.join(home, '.claude', 'local', 'claude'),
-          path.join(home, '.local', 'bin', 'claude'),
-          path.join(home, '.npm-global', 'bin', 'claude'),
-          '/usr/local/bin/claude',
-          '/usr/bin/claude',
-        ];
+    let paths;
+    if (cliCommand === 'openclaude') {
+      paths = [
+        path.join(home, '.local', 'bin', 'openclaude'),
+        path.join(home, '.npm-global', 'bin', 'openclaude'),
+        '/usr/local/bin/openclaude',
+        '/usr/bin/openclaude',
+      ];
+    } else if (cliCommand === 'opencode') {
+      paths = [
+        path.join(home, '.opencode', 'bin', 'opencode'),
+        path.join(home, '.local', 'bin', 'opencode'),
+        path.join(home, '.npm-global', 'bin', 'opencode'),
+        '/usr/local/bin/opencode',
+        '/usr/bin/opencode',
+      ];
+    } else {
+      paths = [
+        path.join(home, '.claude', 'local', 'claude'),
+        path.join(home, '.local', 'bin', 'claude'),
+        path.join(home, '.npm-global', 'bin', 'claude'),
+        '/usr/local/bin/claude',
+        '/usr/bin/claude',
+      ];
+    }
 
     for (const p of paths) {
       try {
@@ -167,16 +185,23 @@ class ClaudeBridge {
       // The trust prompt is auto-accepted via PTY detection below instead.
       const isRoot = process.getuid && process.getuid() === 0;
       const args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
-      if (agent) {
+      if (providerConfig.cli_command !== 'opencode' && agent) {
         args.push('--agent', agent);
       }
 
-      // For non-Anthropic providers, use --system-prompt to force agent persona.
+      // OpenCode (opencode) does not support EvoNexus agents via CLI flags.
+      // We emulate selecting an agent by sending a slash command (e.g. /oracle)
+      // into the interactive session right after spawn.
+      const initialAgentSlash = (providerConfig.cli_command === 'opencode' && agent)
+        ? `/${agent}\n`
+        : null;
+
+      // For non-Anthropic providers (except opencode TUI), use --system-prompt to force agent persona.
       // --append-system-prompt is too weak — GPT models ignore appended instructions.
       // --system-prompt REPLACES the default system prompt, ensuring the agent persona
       // takes priority over CLAUDE.md and other context that mentions "Claude".
       const active = providerConfig.active || 'anthropic';
-      if (active !== 'anthropic' && agent) {
+      if (active !== 'anthropic' && providerConfig.cli_command !== 'opencode' && agent) {
         // Read the agent definition file to build a strong system prompt
         const agentFile = path.join(workingDir, '.claude', 'agents', `${agent}.md`);
         let agentPrompt = '';
@@ -256,7 +281,8 @@ class ClaudeBridge {
         workingDir,
         created: new Date(),
         active: true,
-        killTimeout: null
+        killTimeout: null,
+        cli: providerConfig.cli_command,
       };
 
       this.sessions.set(sessionId, session);
@@ -264,6 +290,30 @@ class ClaudeBridge {
       // Track if we've seen the trust prompt
       let trustPromptHandled = false;
       let dataBuffer = '';
+      let initialAgentAttempts = 0;
+
+      const maybeSendInitialAgent = (delayMs) => {
+        if (!initialAgentSlash) return;
+        if (initialAgentAttempts >= 4) return;
+        const hasTrustPrompt = dataBuffer.includes('Do you trust the files in this folder?');
+        if (hasTrustPrompt && !trustPromptHandled) return;
+
+        const attempt = initialAgentAttempts + 1;
+        initialAgentAttempts = attempt;
+        setTimeout(() => {
+          try {
+            claudeProcess.write(initialAgentSlash);
+            console.log(`[provider] Sent initial agent slash for opencode (attempt ${attempt}): ${initialAgentSlash.trim()}`);
+          } catch (e) {
+            console.warn('[provider] Failed to send initial agent slash:', e?.message || e);
+          }
+        }, delayMs);
+      };
+
+      // Fallback retries: opencode may take a few seconds to become interactive.
+      maybeSendInitialAgent(1500);
+      maybeSendInitialAgent(3000);
+      maybeSendInitialAgent(5000);
 
       claudeProcess.onData((data) => {
         if (process.env.DEBUG) {
@@ -283,6 +333,12 @@ class ClaudeBridge {
             claudeProcess.write('\r');
             console.log(`Sent Enter to accept trust prompt for session ${sessionId}`);
           }, 500);
+        }
+
+        // If opencode is active and an agent was selected in the UI, inject the
+        // agent slash command once the session is responsive.
+        if (initialAgentSlash) {
+          maybeSendInitialAgent(trustPromptHandled ? 250 : 900);
         }
         
         // Clear buffer periodically to prevent memory issues
@@ -366,13 +422,22 @@ class ClaudeBridge {
       }
 
       if (session.active && session.process) {
+        // For opencode TUI sessions, send Ctrl+C first to encourage a clean exit.
+        // Some TUIs ignore SIGTERM when attached to a PTY.
+        try {
+          if (session.cli === 'opencode') {
+            session.process.write('\x03');
+          }
+        } catch {
+          // ignore
+        }
         session.process.kill('SIGTERM');
         
         session.killTimeout = setTimeout(() => {
           if (session.active && session.process) {
             session.process.kill('SIGKILL');
           }
-        }, 5000);
+        }, session.cli === 'opencode' ? 2500 : 5000);
       }
     } catch (error) {
       console.warn(`Error stopping session ${sessionId}:`, error.message);
