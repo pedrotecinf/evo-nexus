@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const pty = require('node-pty');
 const {
   loadProviderConfig,
   resolveProviderModel,
@@ -186,16 +187,171 @@ class ChatBridge {
     this.sessions = new Map(); // sessionId -> { query, abortController, active, sdkSessionId }
   }
 
-  _stripAnsi(s) {
-    if (!delta) return '';
-    if (typeof delta.content === 'string') return delta.content;
-    if (Array.isArray(delta.content)) {
-      return delta.content
-        .map((part) => (part?.type === 'text' ? part.text || '' : ''))
-        .join('');
+  _stripAnsi(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/\x1b\[[0-9;]*[mGKH]/g, '');
+  }
+
+  async _rmrfSafe(dir) {
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    } catch {}
+  }
+
+  _transformOpenCodeEvent(evt) {
+    if (evt?.type === 'step_start') {
+      return { type: 'thinking_start' };
     }
-    if (typeof delta.reasoning === 'string') return delta.reasoning;
-    return '';
+
+    if (evt?.type === 'text') {
+      const t = typeof evt.text === 'string'
+        ? evt.text
+        : (evt.part && typeof evt.part.text === 'string' ? evt.part.text : '');
+      if (!t) return null;
+      return { type: 'text_delta', text: t };
+    }
+
+    if (evt?.type === 'step_finish') {
+      return { type: 'message_stop' };
+    }
+
+    if (evt?.type === 'error') {
+      return { type: 'result', subtype: 'error', isError: true };
+    }
+
+    return null;
+  }
+
+  async _startOpenCodeSession(sessionId, options = {}) {
+    const {
+      agentName,
+      workingDir,
+      prompt,
+      files,
+      sdkSessionId,
+      onMessage,
+      onError,
+      onComplete,
+    } = options;
+
+    if (this.sessions.has(sessionId)) {
+      await this.stopSession(sessionId);
+    }
+
+    const abortController = new AbortController();
+    const providerConfig = loadProviderConfig();
+    const cliCommand = providerConfig.cli_command || 'opencode';
+
+    const env = {
+      ...process.env,
+      ...(providerConfig.env_vars || {}),
+      PATH: `${process.env.HOME}/.opencode/bin:${process.env.PATH}`,
+    };
+
+    let tmpDir = null;
+    const fileArgs = [];
+    try {
+      if (Array.isArray(files) && files.length > 0) {
+        tmpDir = path.join(os.tmpdir(), 'evo-nexus-chat', sessionId, String(Date.now()));
+        await fs.promises.mkdir(tmpDir, { recursive: true });
+        for (const f of files) {
+          if (!f || typeof f.base64 !== 'string' || typeof f.name !== 'string') continue;
+          const safeName = path.basename(f.name).replace(/[^a-zA-Z0-9._-]/g, '_');
+          const outPath = path.join(tmpDir, safeName);
+          await fs.promises.writeFile(outPath, Buffer.from(f.base64, 'base64'));
+          fileArgs.push('--file', outPath);
+        }
+      }
+    } catch (err) {
+      if (tmpDir) await this._rmrfSafe(tmpDir);
+      if (onError) onError(err);
+      return { sessionId, sdkSessionId: null };
+    }
+
+    const userPrompt = typeof prompt === 'string' ? prompt : '';
+    const trimmed = userPrompt.trimStart();
+    const agentPrefix = agentName && !trimmed.startsWith(`/${agentName}`) ? `/${agentName}\n` : '';
+    const message = agentPrefix + userPrompt;
+
+    const args = [
+      'run',
+      '--format', 'json',
+      '--dangerously-skip-permissions',
+      ...(sdkSessionId ? ['--session', sdkSessionId] : []),
+      ...(workingDir ? ['--dir', workingDir] : []),
+      ...fileArgs,
+      message,
+    ];
+
+    const session = {
+      active: true,
+      mode: 'opencode',
+      abortController,
+      sdkSessionId: sdkSessionId || null,
+      tmpDir,
+      pty: null,
+    };
+    this.sessions.set(sessionId, session);
+
+    let sawTextStart = false;
+    let buffer = '';
+
+    try {
+      const proc = pty.spawn(cliCommand, args, {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd: workingDir || process.cwd(),
+        env,
+      });
+      session.pty = proc;
+
+      const flushLine = (line) => {
+        const trimmedLine = this._stripAnsi(line).trim();
+        if (!trimmedLine) return;
+        let evt;
+        try {
+          evt = JSON.parse(trimmedLine);
+        } catch {
+          return;
+        }
+
+        if (evt && typeof evt.sessionID === 'string' && !session.sdkSessionId) {
+          session.sdkSessionId = evt.sessionID;
+          if (onMessage) onMessage({ type: 'session_id', sdkSessionId: evt.sessionID });
+        }
+
+        const transformed = this._transformOpenCodeEvent(evt);
+        if (!transformed) return;
+
+        if (transformed.type === 'text_delta' && !sawTextStart) {
+          sawTextStart = true;
+          if (onMessage) onMessage({ type: 'text_start' });
+        }
+        if (onMessage) onMessage(transformed);
+      };
+
+      proc.onData((chunk) => {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) flushLine(line);
+      });
+
+      proc.onExit(async () => {
+        session.active = false;
+        this.sessions.delete(sessionId);
+        if (tmpDir) await this._rmrfSafe(tmpDir);
+        if (onComplete) onComplete({ sdkSessionId: session.sdkSessionId });
+      });
+    } catch (err) {
+      session.active = false;
+      this.sessions.delete(sessionId);
+      if (tmpDir) await this._rmrfSafe(tmpDir);
+      if (onError) onError(err);
+    }
+
+    return { sessionId, sdkSessionId: session.sdkSessionId };
   }
 
   async _startOpenAICompatibleSession(sessionId, options, providerConfig) {
