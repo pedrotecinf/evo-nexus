@@ -925,7 +925,9 @@ export default function AgentChat({
     >
       {/* Provider note */}
       {providerCli === 'opencode' && (
-        <div className={`mx-4 ${sessionId ? 'mt-12' : 'mt-3'} mb-2 rounded-lg border border-[#2e3a4a] bg-[#0b1018] px-3 py-2 text-[11px] text-[#8a9aae]`}>
+        <div
+          className={`mx-4 mb-2 rounded-lg border border-[#2e3a4a] bg-[#0b1018] px-3 py-2 text-[11px] text-[#8a9aae] ${sessionId ? 'mt-12' : 'mt-3'}`}
+        >
           <span className="font-semibold text-[#e6edf3]">Chat (opencode)</span>: ferramentas rodam automaticamente (sem cards de aprovação) e a primeira resposta pode demorar alguns segundos.
         </div>
       )}
