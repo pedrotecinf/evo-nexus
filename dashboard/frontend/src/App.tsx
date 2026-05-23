@@ -34,6 +34,7 @@ const MemPalace = lazyDefault(() => import('./pages/MemPalace'))
 const Triggers = lazyDefault(() => import('./pages/Triggers'))
 const Backups = lazyDefault(() => import('./pages/Backups'))
 const Providers = lazyDefault(() => import('./pages/Providers'))
+const HermesUI = lazyDefault(() => import('./pages/HermesUI'))
 const Workspace = lazyDefault(() => import('./pages/Workspace'))
 const Settings = lazyDefault(() => import('./pages/Settings'))
 const ShareLinks = lazyDefault(() => import('./pages/ShareLinks'))
@@ -261,6 +262,7 @@ function AppContent() {
               {hasPermission('config', 'view') && <Route path="/backups" element={<Backups />} />}
               <Route path="/config" element={<Navigate to="/settings" replace />} />
               <Route path="/providers" element={<Providers />} />
+              {hasPermission('config', 'view') && <Route path="/hermes" element={<HermesUI />} />}
               {hasPermission('users', 'view') && <Route path="/users" element={<Users />} />}
               {hasPermission('audit', 'view') && <Route path="/audit" element={<Audit />} />}
               {hasPermission('users', 'manage') && <Route path="/roles" element={<Roles />} />}

@@ -837,6 +837,7 @@ from routes.triggers import bp as triggers_bp
 from routes.terminal_proxy import bp as terminal_proxy_bp, register_websocket_proxy as _register_terminal_ws
 from routes.backups import bp as backups_bp
 from routes.providers import bp as providers_bp
+from routes.hermes_proxy import bp as hermes_proxy_bp
 from routes.settings import bp as settings_bp
 from routes.shares import bp as shares_bp
 from routes.heartbeats import bp as heartbeats_bp
@@ -889,6 +890,7 @@ app.register_blueprint(mempalace_bp)
 app.register_blueprint(tasks_bp)
 app.register_blueprint(triggers_bp)
 app.register_blueprint(terminal_proxy_bp)
+app.register_blueprint(hermes_proxy_bp)
 
 # Mount the terminal-server WebSocket proxy on the same Sock instance the
 # rest of the app uses. Done after the blueprint is registered so route

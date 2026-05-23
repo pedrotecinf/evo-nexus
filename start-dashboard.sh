@@ -19,6 +19,7 @@ set -euo pipefail
 
 TERMINAL_PORT="${TERMINAL_SERVER_PORT:-32352}"
 FLASK_PORT="${EVONEXUS_PORT:-8080}"
+HERMES_UI_PORT="${HERMES_UI_PORT:-9119}"
 
 echo "[start-dashboard] terminal-server on :${TERMINAL_PORT}, Flask on :${FLASK_PORT}"
 
@@ -79,6 +80,16 @@ fi
 node /workspace/dashboard/terminal-server/bin/server.js --port "${TERMINAL_PORT}" &
 TERMINAL_PID=$!
 
+# Start Hermes UI in the background (if hermes is installed)
+HERMES_PID=""
+if command -v hermes &>/dev/null; then
+    echo "[start-dashboard] starting Hermes UI on :${HERMES_UI_PORT}"
+    hermes ui --port "${HERMES_UI_PORT}" &
+    HERMES_PID=$!
+else
+    echo "[start-dashboard] hermes not found, skipping Hermes UI"
+fi
+
 # Start Flask in the background
 uv run python /workspace/dashboard/backend/app.py &
 FLASK_PID=$!
@@ -86,10 +97,12 @@ FLASK_PID=$!
 # When this script exits for any reason, kill both children
 # shellcheck disable=SC2317  # invoked by trap below
 cleanup() {
-    echo "[start-dashboard] shutting down (terminal=${TERMINAL_PID}, flask=${FLASK_PID})"
+    echo "[start-dashboard] shutting down (terminal=${TERMINAL_PID}, flask=${FLASK_PID}, hermes=${HERMES_PID:-none})"
     kill "${TERMINAL_PID}" "${FLASK_PID}" 2>/dev/null || true
+    [ -n "${HERMES_PID}" ] && kill "${HERMES_PID}" 2>/dev/null || true
     wait "${TERMINAL_PID}" 2>/dev/null || true
     wait "${FLASK_PID}" 2>/dev/null || true
+    [ -n "${HERMES_PID}" ] && wait "${HERMES_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
