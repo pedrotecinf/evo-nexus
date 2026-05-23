@@ -4,7 +4,7 @@
 # The upstream Dockerfile.dashboard is Python-only (Flask + React). That
 # is enough for local dev but the embedded terminal — a core feature —
 # needs the Node terminal-server running inside the container, plus
-# the `claude` and `openclaude` binaries that sessions spawn.
+# the `claude`, `openclaude`, and `hermes` binaries that sessions spawn.
 #
 # Three stages:
 #   Stage 1 (frontend-build):   compiles React with Vite (node:22-alpine)
@@ -53,12 +53,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Both CLIs — the Providers page in the UI switches between them at runtime.
+# All CLIs — the Providers page in the UI switches between them at runtime.
 # @gitlawb/openclaude@latest is pinned to the npm dist-tag which as of the
 # current fix is ≥0.3.0 (first version with the Codex shortcut endpoint).
 RUN npm install -g \
         @anthropic-ai/claude-code \
         @gitlawb/openclaude@latest
+
+# Install Hermes Agent CLI (multi-provider AI agent)
+RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+ENV PATH="/root/.hermes/bin:${PATH}"
 
 # Timezone
 ENV TZ=America/Sao_Paulo
