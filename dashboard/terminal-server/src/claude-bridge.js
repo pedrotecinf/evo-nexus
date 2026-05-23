@@ -324,7 +324,11 @@ class ClaudeBridge {
           dataBuffer = dataBuffer.slice(-5000);
         }
         
-        onOutput(data);
+        // Strip OSC 11 (set background color) sequences — xterm.js
+        // doesn't handle them and renders raw escape text.
+        // eslint-disable-next-line no-control-regex
+        const cleaned = data.replace(/\x1b\]11;[^\x1b\x07]*(?:\x1b\\|\x07)/g, '');
+        if (cleaned) onOutput(cleaned);
       });
 
       claudeProcess.onExit((exitCode, signal) => {
