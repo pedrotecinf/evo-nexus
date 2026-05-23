@@ -40,8 +40,22 @@
     },
     "omnirouter": {
       "name": "OMNIROUTER",
-      "description": "OpenAI-compatible custom provider (URL, API Key e Model).",
+      "description": "Provedor custom — qualquer API OpenAI-compatible (URL, API Key e Model). Funciona via OpenClaude ou Hermes.",
       "cli_command": "openclaude",
+      "cli_options": ["openclaude", "hermes"],
+      "cli_env_presets": {
+        "openclaude": {
+          "CLAUDE_CODE_USE_OPENAI": "1",
+          "OPENAI_BASE_URL": "",
+          "OPENAI_API_KEY": "",
+          "OPENAI_MODEL": ""
+        },
+        "hermes": {
+          "HERMES_PROVIDER": "",
+          "HERMES_MODEL": "",
+          "HERMES_API_KEY": ""
+        }
+      },
       "env_vars": {
         "CLAUDE_CODE_USE_OPENAI": "1",
         "OPENAI_BASE_URL": "",

@@ -258,7 +258,7 @@ def list_providers():
                          "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX")
         ) if env_vars else True
 
-        result.append({
+        entry = {
             "id": key,
             "name": prov.get("name", key),
             "description": prov.get("description", ""),
@@ -274,7 +274,15 @@ def list_providers():
             "default_model": prov.get("default_model"),
             "default_base_url": prov.get("default_base_url"),
             "default_region": prov.get("default_region"),
-        })
+        }
+
+        # CLI selector support (e.g. omnirouter can use openclaude or hermes)
+        cli_options = prov.get("cli_options")
+        if cli_options:
+            entry["cli_options"] = [c for c in cli_options if c in ALLOWED_CLI_COMMANDS]
+            entry["cli_env_presets"] = prov.get("cli_env_presets", {})
+
+        result.append(entry)
 
     return jsonify({
         "providers": result,
@@ -347,7 +355,7 @@ def get_provider_config(provider_id):
 @bp.route("/api/providers/<provider_id>/config", methods=["POST"])
 @login_required
 def update_provider_config(provider_id):
-    """Update a provider's env vars."""
+    """Update a provider's env vars (and optionally cli_command)."""
     data = request.get_json(silent=True) or {}
     new_env_vars = data.get("env_vars", {})
 
@@ -355,6 +363,18 @@ def update_provider_config(provider_id):
     provider = config.get("providers", {}).get(provider_id)
     if not provider:
         return jsonify({"error": f"Unknown provider: {provider_id}"}), 400
+
+    # Allow switching cli_command if provider has cli_options
+    new_cli = data.get("cli_command")
+    cli_options = provider.get("cli_options", [])
+    if new_cli and cli_options and new_cli in cli_options and new_cli in ALLOWED_CLI_COMMANDS:
+        provider["cli_command"] = new_cli
+        # When switching CLI, replace env_vars with the preset for that CLI
+        presets = provider.get("cli_env_presets", {})
+        if new_cli in presets:
+            provider["env_vars"] = dict(presets[new_cli])
+            # Update requires_logout: hermes doesn't need it
+            provider["requires_logout"] = new_cli != "hermes"
 
     # Merge: only update allowlisted vars that are provided and not masked
     existing = provider.get("env_vars", {})
