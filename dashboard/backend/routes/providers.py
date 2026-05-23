@@ -88,11 +88,46 @@ def _write_config(config: dict):
     )
 
 
+_CLI_SEARCH_DIRS = (
+    str(Path.home() / ".hermes" / "bin"),
+    str(Path.home() / ".local" / "bin"),
+    str(Path.home() / ".npm-global" / "bin"),
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+)
+
+
 def _mask_secret(value: str) -> str:
     """Mask an API key for safe display: sk-or-v1-abc...xyz → sk-or-****xyz."""
     if not value or len(value) < 8:
         return "****" if value else ""
     return value[:6] + "****" + value[-4:]
+
+
+def _build_cli_env(env: dict | None = None) -> dict:
+    """Ensure CLI checks inherit common user-local bin directories."""
+    merged = dict(env or os.environ)
+    current_path = merged.get("PATH", "")
+    path_parts = [p for p in current_path.split(os.pathsep) if p]
+    for candidate in _CLI_SEARCH_DIRS:
+        if candidate not in path_parts:
+            path_parts.append(candidate)
+    merged["PATH"] = os.pathsep.join(path_parts)
+    return merged
+
+
+def _resolve_cli_path(command: str, env: dict | None = None) -> str | None:
+    """Resolve a CLI path using an augmented PATH plus common fallbacks."""
+    cli_env = _build_cli_env(env)
+    resolved = shutil.which(command, path=cli_env.get("PATH"))
+    if resolved:
+        return resolved
+    for directory in _CLI_SEARCH_DIRS:
+        candidate = Path(directory) / command
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def _run_cli_version(command: str, env: dict | None = None) -> dict:
@@ -101,24 +136,24 @@ def _run_cli_version(command: str, env: dict | None = None) -> dict:
     Each branch uses a literal string for the executable so that
     semgrep/opengrep does not flag it as subprocess injection.
     """
-    run_kwargs = dict(capture_output=True, text=True, timeout=10)
-    if env is not None:
-        run_kwargs["env"] = env
+    cli_env = _build_cli_env(env)
+    resolved = _resolve_cli_path(command, cli_env)
+    run_kwargs = dict(capture_output=True, text=True, timeout=10, env=cli_env)
 
     try:
-        if command == "hermes":
-            result = subprocess.run(["hermes", "--version"], **run_kwargs)  # noqa: S603, S607
-        elif command == "openclaude":
-            result = subprocess.run(["openclaude", "--version"], **run_kwargs)  # noqa: S603, S607
-        elif command == "claude":
-            result = subprocess.run(["claude", "--version"], **run_kwargs)  # noqa: S603, S607
+        if resolved and command == "hermes":
+            result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
+        elif resolved and command == "openclaude":
+            result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
+        elif resolved and command == "claude":
+            result = subprocess.run([resolved, "--version"], **run_kwargs)  # noqa: S603
         else:
             return {"installed": False, "version": None, "path": None}
 
         version = result.stdout.strip() or result.stderr.strip()
-        return {"installed": True, "version": version, "path": shutil.which(command)}
+        return {"installed": True, "version": version, "path": resolved}
     except (subprocess.TimeoutExpired, OSError):
-        return {"installed": False, "version": None, "path": shutil.which(command)}
+        return {"installed": False, "version": None, "path": resolved}
 
 
 def _check_cli(command: str) -> dict:
@@ -246,6 +281,7 @@ def list_providers():
         "active_provider": active,
         "claude_installed": claude_status["installed"],
         "openclaude_installed": openclaude_status["installed"],
+        "hermes_installed": hermes_status["installed"],
     })
 
 
@@ -354,18 +390,25 @@ def test_provider(provider_id):
     if cli not in ALLOWED_CLI_COMMANDS:
         return jsonify({"success": False, "error": f"Unsupported CLI: {cli}"}), 400
 
-    if not shutil.which(cli):
+    resolved_cli = _resolve_cli_path(cli)
+    if not resolved_cli:
+        if cli == "hermes":
+            hint = "Install Hermes and ensure 'hermes' is on PATH"
+        elif cli == "openclaude":
+            hint = "npm install -g @gitlawb/openclaude"
+        else:
+            hint = "npm install -g @anthropic-ai/claude-code"
         return jsonify({
             "success": False,
             "error": f"'{cli}' not found in PATH",
-            "hint": f"npm install -g {'@gitlawb/openclaude' if cli == 'openclaude' else '@anthropic-ai/claude-code'}",
+            "hint": hint,
         })
 
     # Build env with sanitized provider vars
     env_vars = _sanitize_env_vars(
         {k: v for k, v in provider.get("env_vars", {}).items() if v}
     )
-    test_env = {**os.environ, **env_vars}
+    test_env = _build_cli_env({**os.environ, **env_vars})
 
     result = _run_cli_version(cli, env=test_env)
     return jsonify({

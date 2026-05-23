@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const pty = require('node-pty');
 const {
   loadProviderConfig,
   resolveProviderModel,
@@ -274,6 +275,154 @@ class ChatBridge {
     return '';
   }
 
+  _stripAnsi(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/\x1b\[[0-9;]*[mGKH]/g, '');
+  }
+
+  async _rmrfSafe(dir) {
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    } catch {}
+  }
+
+  async _startHermesSession(sessionId, options = {}) {
+    const {
+      agentName,
+      workingDir,
+      prompt,
+      files,
+      onMessage,
+      onError,
+      onComplete,
+    } = options;
+
+    if (this.sessions.has(sessionId)) {
+      await this.stopSession(sessionId);
+    }
+
+    const providerConfig = loadProviderConfig();
+    const cliCommand = providerConfig.cli_command || 'hermes';
+
+    const home = process.env.HOME || '/';
+    const env = {
+      ...process.env,
+      ...(providerConfig.env_vars || {}),
+      PATH: `${path.join(home, '.hermes', 'bin')}:${path.join(home, '.local', 'bin')}:${process.env.PATH}`,
+      TERM: 'dumb',
+    };
+
+    let tmpDir = null;
+    try {
+      if (Array.isArray(files) && files.length > 0) {
+        tmpDir = path.join(os.tmpdir(), 'evo-nexus-chat', sessionId, String(Date.now()));
+        await fs.promises.mkdir(tmpDir, { recursive: true });
+        for (const f of files) {
+          if (!f || typeof f.base64 !== 'string' || typeof f.name !== 'string') continue;
+          const safeName = path.basename(f.name).replace(/[^a-zA-Z0-9._-]/g, '_');
+          const outPath = path.join(tmpDir, safeName);
+          await fs.promises.writeFile(outPath, Buffer.from(f.base64, 'base64'));
+        }
+      }
+    } catch (err) {
+      if (tmpDir) await this._rmrfSafe(tmpDir);
+      if (onError) onError(err);
+      return { sessionId, sdkSessionId: null };
+    }
+
+    const userPrompt = typeof prompt === 'string' ? prompt : '';
+
+    // Build hermes args: --skills agent (before subcommand) + chat -Q -q "prompt"
+    const hermesArgs = [];
+    if (agentName) {
+      hermesArgs.push('--skills', agentName);
+    }
+    hermesArgs.push('chat', '-Q', '-q', userPrompt);
+
+    // Resolve hermes binary
+    const { execSync } = require('child_process');
+    let hermesBin = cliCommand;
+    try {
+      hermesBin = execSync('which hermes', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        env,
+      }).trim() || cliCommand;
+    } catch {
+      const fallbacks = [
+        path.join(home, '.hermes', 'bin', 'hermes'),
+        path.join(home, '.local', 'bin', 'hermes'),
+        '/usr/local/bin/hermes',
+      ];
+      for (const p of fallbacks) {
+        if (fs.existsSync(p)) { hermesBin = p; break; }
+      }
+    }
+
+    console.log(`[chat-bridge] Starting Hermes session ${sessionId}: ${hermesBin} ${hermesArgs.join(' ')}`);
+
+    const hermesProcess = pty.spawn(hermesBin, hermesArgs, {
+      cwd: workingDir || process.cwd(),
+      env,
+      cols: 120,
+      rows: 40,
+      name: 'xterm-color',
+    });
+
+    const session = {
+      active: true,
+      abortController: new AbortController(),
+      sdkSessionId: null,
+      hermesProcess,
+    };
+    this.sessions.set(sessionId, session);
+
+    let outputBuffer = '';
+
+    if (onMessage) {
+      onMessage({ type: 'message_start' });
+      onMessage({ type: 'text_start' });
+    }
+
+    hermesProcess.onData((data) => {
+      if (!session.active) return;
+      const clean = this._stripAnsi(data);
+      if (clean.trim() && onMessage) {
+        onMessage({ type: 'text_delta', text: clean });
+      }
+      outputBuffer += clean;
+      if (outputBuffer.length > 50000) {
+        outputBuffer = outputBuffer.slice(-25000);
+      }
+    });
+
+    hermesProcess.onExit(({ exitCode }) => {
+      console.log(`[chat-bridge] Hermes session ${sessionId} exited with code ${exitCode}`);
+      if (onMessage) {
+        onMessage({ type: 'message_stop' });
+        onMessage({
+          type: 'result',
+          subtype: exitCode === 0 ? 'success' : 'error',
+          isError: exitCode !== 0,
+        });
+      }
+      session.active = false;
+      this.sessions.delete(sessionId);
+      if (tmpDir) this._rmrfSafe(tmpDir);
+      if (onComplete) onComplete({ sdkSessionId: null });
+    });
+
+    hermesProcess.on('error', (err) => {
+      console.error(`[chat-bridge] Hermes session ${sessionId} error:`, err.message);
+      session.active = false;
+      this.sessions.delete(sessionId);
+      if (tmpDir) this._rmrfSafe(tmpDir);
+      if (onError) onError(err);
+    });
+
+    return { sessionId, sdkSessionId: null };
+  }
+
   async _startOpenAICompatibleSession(sessionId, options, providerConfig) {
     const {
       agentName,
@@ -408,6 +557,9 @@ class ChatBridge {
     } = options;
 
     const providerConfig = loadProviderConfig();
+    if (providerConfig.cli_command === 'hermes') {
+      return this._startHermesSession(sessionId, options);
+    }
     if (providerConfig.active !== 'anthropic') {
       return this._startOpenAICompatibleSession(sessionId, options, providerConfig);
     }
@@ -664,6 +816,12 @@ class ChatBridge {
 
     const sdkSessionId = session.sdkSessionId;
     session.active = false;
+
+    // Kill Hermes PTY process if present
+    if (session.hermesProcess) {
+      try { session.hermesProcess.kill(); } catch {}
+    }
+
     // Deny all pending approval requests so awaiting canUseTool promises resolve.
     if (session.pendingApprovals && session.pendingApprovals.size > 0) {
       for (const entry of session.pendingApprovals.values()) {
