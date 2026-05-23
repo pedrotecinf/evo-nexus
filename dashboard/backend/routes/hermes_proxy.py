@@ -84,12 +84,31 @@ def proxy_http(subpath: str = ""):
     except requests.exceptions.Timeout:
         return "Hermes UI timed out.", 504
 
-    response = Response(
-        stream_with_context(upstream.iter_content(chunk_size=8192)),
-        status=upstream.status_code,
-    )
+    content_type = upstream.headers.get("content-type", "")
+    is_html = "text/html" in content_type
+
+    if is_html:
+        # Buffer HTML to rewrite absolute asset paths.
+        # Hermes UI serves assets at /assets/*, /favicon.ico, etc.
+        # Behind /hermes-ui/ proxy these must become /hermes-ui/assets/* etc.
+        body = upstream.content.decode("utf-8", errors="replace")
+        body = body.replace('src="/', 'src="/hermes-ui/')
+        body = body.replace("src='/", "src='/hermes-ui/")
+        body = body.replace('href="/', 'href="/hermes-ui/')
+        body = body.replace("href='/", "href='/hermes-ui/")
+        body = body.replace('action="/', 'action="/hermes-ui/')
+        body = body.replace("action='/", "action='/hermes-ui/")
+        response = Response(body, status=upstream.status_code, content_type=content_type)
+    else:
+        response = Response(
+            stream_with_context(upstream.iter_content(chunk_size=8192)),
+            status=upstream.status_code,
+        )
+
     for key, value in upstream.headers.items():
         kl = key.lower()
         if kl not in _HOP_BY_HOP and kl not in _IFRAME_BLOCK:
+            if is_html and kl == "content-length":
+                continue
             response.headers[key] = value
     return response

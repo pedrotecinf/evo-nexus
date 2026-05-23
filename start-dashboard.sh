@@ -76,6 +76,42 @@ EOF
     fi
 fi
 
+# ----------------------------------------------------------------------------
+# Sync EvoNexus agents → Hermes profiles.
+#
+# Each .claude/agents/*.md becomes a Hermes profile whose SOUL.md contains
+# the full agent instructions. This lets the terminal spawn agents with
+# `hermes -p <agent> chat` and get the complete persona, not just a one-line
+# description.
+# ----------------------------------------------------------------------------
+if command -v hermes &>/dev/null; then
+    AGENTS_DIR="/workspace/.claude/agents"
+    HERMES_PROFILES="/root/.hermes/profiles"
+    if [ -d "${AGENTS_DIR}" ]; then
+        echo "[start-dashboard] syncing EvoNexus agents → Hermes profiles"
+        for agent_file in "${AGENTS_DIR}"/*.md; do
+            [ -f "${agent_file}" ] || continue
+            slug=$(basename "${agent_file}" .md)
+            profile_dir="${HERMES_PROFILES}/${slug}"
+            mkdir -p "${profile_dir}"
+
+            # Extract body after YAML frontmatter (--- ... ---)
+            body=$(sed -n '/^---$/,/^---$/!p' "${agent_file}" | tail -n +1)
+            if [ -z "${body}" ]; then
+                body="You are the ${slug} agent."
+            fi
+
+            # Only write if changed (avoid unnecessary disk writes)
+            soul_file="${profile_dir}/SOUL.md"
+            if [ ! -f "${soul_file}" ] || [ "$(cat "${soul_file}")" != "${body}" ]; then
+                echo "${body}" > "${soul_file}"
+                echo "[start-dashboard]   synced profile: ${slug}"
+            fi
+        done
+        echo "[start-dashboard] agent→profile sync done"
+    fi
+fi
+
 # Start terminal-server in the background
 node /workspace/dashboard/terminal-server/bin/server.js --port "${TERMINAL_PORT}" &
 TERMINAL_PID=$!

@@ -186,22 +186,12 @@ class ClaudeBridge {
       const isRoot = process.getuid && process.getuid() === 0;
       let args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
       if (providerConfig.cli_command === 'hermes') {
-        // Hermes uses its own interactive mode: `hermes chat`
-        // -z is a TOP-LEVEL flag (before subcommand), not a chat flag.
-        // Only pass a short description — full agent .md is too large for CLI args.
+        // Hermes agents use profiles: each EvoNexus agent maps to a Hermes
+        // profile with SOUL.md containing the full agent instructions.
+        // Profiles are synced from .claude/agents/*.md on container startup
+        // (see start-dashboard.sh).
         if (agent) {
-          const agentFile = path.join(workingDir, '.claude', 'agents', `${agent}.md`);
-          let desc = `You are the ${agent} agent.`;
-          try {
-            const content = fs.readFileSync(agentFile, 'utf8');
-            const descMatch = content.match(/^description:\s*"([^"]+)"/m);
-            if (descMatch) {
-              // First sentence of description only
-              const firstSentence = descMatch[1].split(/\\n/)[0].trim();
-              desc = `You are ${agent}. ${firstSentence}`;
-            }
-          } catch {}
-          args = ['-z', desc, 'chat'];
+          args = ['-p', agent, 'chat'];
         } else {
           args = ['chat'];
         }
@@ -209,7 +199,7 @@ class ClaudeBridge {
         args.push('--agent', agent);
       }
 
-      // Hermes handles agent persona via -z flag above.
+      // Hermes handles agent persona via profiles (see above).
       // For non-Anthropic CLI providers (openclaude), use --system-prompt to
       // force agent persona. Hermes does not need this override.
       const initialAgentSlash = null;
