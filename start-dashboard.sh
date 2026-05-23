@@ -101,7 +101,16 @@ if command -v hermes &>/dev/null; then
                 body="You are the ${slug} agent."
             fi
 
-            # Only write if changed (avoid unnecessary disk writes)
+            # Copy base config (.env, config.yaml) from default profile so
+            # each agent profile inherits provider/API key settings.
+            HERMES_HOME="/root/.hermes"
+            for cfg in ".env" "config.yaml"; do
+                if [ -f "${HERMES_HOME}/${cfg}" ] && [ ! -f "${profile_dir}/${cfg}" ]; then
+                    cp "${HERMES_HOME}/${cfg}" "${profile_dir}/${cfg}"
+                fi
+            done
+
+            # Only write SOUL.md if changed (avoid unnecessary disk writes)
             soul_file="${profile_dir}/SOUL.md"
             if [ ! -f "${soul_file}" ] || [ "$(cat "${soul_file}")" != "${body}" ]; then
                 echo "${body}" > "${soul_file}"
