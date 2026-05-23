@@ -18,7 +18,7 @@ name: Build & Publish Docker Images (Swarm)
 #   * DOCKERHUB_TOKEN     — access token (Settings → Security → New Access Token)
 on:
   push:
-    branches: [main]
+    branches: [main, feature/hermes-runtime]
     tags: ['v*']
   workflow_dispatch:
 
