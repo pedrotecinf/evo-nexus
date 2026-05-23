@@ -1,8 +1,8 @@
 """Providers endpoint — manage AI provider configurations (Anthropic, OpenRouter, OpenAI, Gemini, etc.).
 
-EvoNexus supports multiple AI providers via OpenClaude. The active provider
-determines which CLI binary (claude vs openclaude) and which env vars are
-injected when spawning sessions.
+EvoNexus supports multiple AI providers via OpenClaude or Hermes. The active
+provider determines which CLI binary (claude, openclaude, or hermes) and which
+env vars are injected when spawning sessions.
 """
 
 import base64
@@ -32,7 +32,7 @@ OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token"
 CODEX_AUTH_FILE = Path.home() / ".codex" / "auth.json"
 
 # Allowlisted CLI commands — only these binaries can be spawned
-ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude"})
+ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude", "hermes"})
 
 # Allowlisted env var names — only these can be injected into subprocess
 ALLOWED_ENV_VARS = frozenset({
@@ -53,6 +53,14 @@ ALLOWED_ENV_VARS = frozenset({
     "AWS_BEARER_TOKEN_BEDROCK",
     "ANTHROPIC_VERTEX_PROJECT_ID",
     "CLOUD_ML_REGION",
+    # Hermes support
+    "AGENT_MAX_TURNS",
+    "HERMES_MODEL",
+    "HERMES_PROVIDER",
+    "HERMES_API_KEY",
+    "OPENROUTER_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "DEEPSEEK_API_KEY",
 })
 
 
@@ -98,7 +106,9 @@ def _run_cli_version(command: str, env: dict | None = None) -> dict:
         run_kwargs["env"] = env
 
     try:
-        if command == "openclaude":
+        if command == "hermes":
+            result = subprocess.run(["hermes", "--version"], **run_kwargs)  # noqa: S603, S607
+        elif command == "openclaude":
             result = subprocess.run(["openclaude", "--version"], **run_kwargs)  # noqa: S603, S607
         elif command == "claude":
             result = subprocess.run(["claude", "--version"], **run_kwargs)  # noqa: S603, S607
@@ -180,16 +190,22 @@ def list_providers():
     active = config.get("active_provider", "anthropic")
     providers = config.get("providers", {})
 
-    # Check CLI installation status for both binaries
+    # Check CLI installation status for all binaries
     claude_status = _check_cli("claude")
     openclaude_status = _check_cli("openclaude")
+    hermes_status = _check_cli("hermes")
 
     result = []
     for key, prov in providers.items():
         cli = prov.get("cli_command", "claude")
         if cli not in ALLOWED_CLI_COMMANDS:
             continue
-        cli_status = claude_status if cli == "claude" else openclaude_status
+        if cli == "hermes":
+            cli_status = hermes_status
+        elif cli == "openclaude":
+            cli_status = openclaude_status
+        else:
+            cli_status = claude_status
 
         # Mask env var values for API response
         env_vars = prov.get("env_vars", {})

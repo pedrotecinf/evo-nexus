@@ -220,28 +220,50 @@ def step7_invoke_claude(
     max_turns: int,
     timeout_seconds: int,
 ) -> dict:
-    """Invoke Claude via subprocess with hard timeout. Returns result dict."""
+    """Invoke Claude/OpenClaude/Hermes via subprocess with hard timeout. Returns result dict."""
     import shutil
 
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
+    # Try Claude Code first, then OpenClaude, then Hermes (fallback chain)
+    cli_bin = None
+    for cli in ["claude", "openclaude", "hermes"]:
+        if shutil.which(cli):
+            cli_bin = cli
+            break
+
+    if not cli_bin:
         return {
             "status": "fail",
-            "error": "claude binary not found in PATH",
+            "error": "No CLI binary found in PATH (tried: claude, openclaude, hermes)",
             "output": "",
             "tokens_in": None,
             "tokens_out": None,
             "cost_usd": None,
         }
 
-    cmd = [
-        claude_bin,
-        "--print",
-        "--max-turns", str(max_turns),
-        "--dangerously-skip-permissions",
-        "--output-format", "json",
-        prompt,  # positional argument — Claude CLI does not have a -p flag
-    ]
+    # Build command based on CLI type
+    if cli_bin == "hermes":
+        cmd = [
+            cli_bin,
+            "chat",
+            "-Q",
+            "-q", prompt,
+        ]
+        if max_turns:
+            env = os.environ.copy()
+            env["AGENT_MAX_TURNS"] = str(max_turns)
+        else:
+            env = os.environ.copy()
+    else:
+        # Claude Code / OpenClaude
+        cmd = [
+            cli_bin,
+            "--print",
+            "--max-turns", str(max_turns),
+            "--dangerously-skip-permissions",
+            "--output-format", "json",
+            prompt,  # positional argument — Claude CLI does not have a -p flag
+        ]
+        env = os.environ.copy()
 
     start_time = time.time()
     proc = None
@@ -256,6 +278,7 @@ def step7_invoke_claude(
             stderr=subprocess.PIPE,
             text=True,
             cwd=str(WORKSPACE),
+            env=env,
             start_new_session=True,  # new process group for clean kill
         )
 

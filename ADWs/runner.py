@@ -124,7 +124,7 @@ def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=N
             f.write(f"{'='*60}\nSTDERR:\n{'='*60}\n{stderr}\n")
 
 
-_ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude"})
+_ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude", "hermes"})
 
 
 def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: dict) -> subprocess.Popen:
@@ -148,7 +148,19 @@ def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: d
     )
 
     # Hardcoded dispatch — each branch uses a literal string for the executable
-    if cli_command == "openclaude":
+    if cli_command == "hermes":
+        # Use the Hermes adapter wrapper for consistent JSON output
+        adapter_path = Path(__file__).parent / "hermes_adapter.py"
+        hermes_args = [
+            "--print",
+            "--output-format", "json",
+            "--dangerously-skip-permissions",
+        ]
+        if agent:
+            hermes_args.extend(["--agent", agent])
+        hermes_args.append(prompt)
+        return subprocess.Popen([sys.executable, str(adapter_path)] + hermes_args, **popen_kwargs)  # noqa: S603
+    elif cli_command == "openclaude":
         return subprocess.Popen(["openclaude"] + base_args, **popen_kwargs)  # noqa: S603
     else:
         return subprocess.Popen(["claude"] + base_args, **popen_kwargs)  # noqa: S603
@@ -159,6 +171,9 @@ _ALLOWED_ENV_VARS = frozenset({
     "CODEX_AUTH_JSON_PATH", "CODEX_API_KEY",
     "GEMINI_API_KEY", "GEMINI_MODEL", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK",
     "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION",
+    # Hermes support
+    "AGENT_MAX_TURNS", "HERMES_MODEL", "HERMES_PROVIDER", "HERMES_API_KEY",
+    "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
 })
 
 
@@ -197,7 +212,7 @@ def _get_provider_config() -> tuple[str, dict]:
 
 def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent: str = None) -> dict:
     """
-    Execute AI CLI (claude or openclaude) with streaming output.
+    Execute AI CLI (claude, openclaude, or hermes) with streaming output.
 
     Uses the active provider from config/providers.json to determine
     which binary to run and which env vars to inject.

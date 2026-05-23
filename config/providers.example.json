@@ -8,6 +8,22 @@
       "env_vars": {},
       "requires_logout": false
     },
+    "hermes": {
+      "name": "Hermes Agent",
+      "description": "Hermes Agent — agente AI multi-provedor (OpenRouter, Anthropic, OpenAI, DeepSeek, etc.)",
+      "cli_command": "hermes",
+      "env_vars": {
+        "HERMES_PROVIDER": "",
+        "HERMES_MODEL": "",
+        "OPENROUTER_API_KEY": "",
+        "ANTHROPIC_API_KEY": "",
+        "DEEPSEEK_API_KEY": ""
+      },
+      "default_provider": "openrouter",
+      "default_model": "anthropic/claude-sonnet-4",
+      "requires_logout": false,
+      "setup_hint": "Configure o provider e model via env vars ou hermes config"
+    },
     "openrouter": {
       "name": "OpenRouter",
       "description": "200+ modelos via OpenRouter (Claude, GPT, Gemini, Llama, etc.)",
