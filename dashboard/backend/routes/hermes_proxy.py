@@ -39,6 +39,15 @@ _HOP_BY_HOP = frozenset(
     }
 )
 
+# Headers that block iframe embedding — strip from upstream responses
+_IFRAME_BLOCK = frozenset(
+    {
+        "x-frame-options",
+        "content-security-policy",
+        "content-security-policy-report-only",
+    }
+)
+
 
 def _forward_headers(src: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in src.items() if k.lower() not in _HOP_BY_HOP}
@@ -80,6 +89,7 @@ def proxy_http(subpath: str = ""):
         status=upstream.status_code,
     )
     for key, value in upstream.headers.items():
-        if key.lower() not in _HOP_BY_HOP:
+        kl = key.lower()
+        if kl not in _HOP_BY_HOP and kl not in _IFRAME_BLOCK:
             response.headers[key] = value
     return response
