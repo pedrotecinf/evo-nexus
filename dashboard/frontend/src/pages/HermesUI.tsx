@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
 
 export default function HermesUI() {
   const [error, setError] = useState(false)
