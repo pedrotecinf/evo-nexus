@@ -187,21 +187,23 @@ class ClaudeBridge {
       let args = (dangerouslySkipPermissions && !isRoot) ? ['--dangerously-skip-permissions'] : [];
       if (providerConfig.cli_command === 'hermes') {
         // Hermes uses its own interactive mode: `hermes chat`
-        // --dangerously-skip-permissions is not applicable
-        args = ['chat'];
+        // -z is a TOP-LEVEL flag (before subcommand), not a chat flag.
+        // Only pass a short description — full agent .md is too large for CLI args.
         if (agent) {
-          // EvoNexus agents are NOT hermes skills — don't use --skills.
-          // Instead, inject agent persona via -z (initial prompt).
           const agentFile = path.join(workingDir, '.claude', 'agents', `${agent}.md`);
-          let agentPrompt = '';
+          let desc = `You are the ${agent} agent.`;
           try {
             const content = fs.readFileSync(agentFile, 'utf8');
-            const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
-            agentPrompt = match ? match[1].trim() : content;
-          } catch {
-            agentPrompt = `You are the ${agent} agent.`;
-          }
-          args.push('-z', `You are ${agent}. Follow these instructions:\n\n${agentPrompt}`);
+            const descMatch = content.match(/^description:\s*"([^"]+)"/m);
+            if (descMatch) {
+              // First sentence of description only
+              const firstSentence = descMatch[1].split(/\\n/)[0].trim();
+              desc = `You are ${agent}. ${firstSentence}`;
+            }
+          } catch {}
+          args = ['-z', desc, 'chat'];
+        } else {
+          args = ['chat'];
         }
       } else if (agent) {
         args.push('--agent', agent);
