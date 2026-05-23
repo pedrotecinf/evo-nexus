@@ -36,8 +36,8 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN npm install -g @gitlawb/openclaude@latest
 
 # Install Hermes Agent CLI (multi-provider AI agent)
-RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
-ENV PATH="/root/.hermes/bin:${PATH}"
+# PyPI package — avoids heavy install script that needs build tools + Python 3.11
+RUN uv tool install hermes-agent
 
 # GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \

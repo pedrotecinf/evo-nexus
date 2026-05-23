@@ -61,8 +61,8 @@ RUN npm install -g \
         @gitlawb/openclaude@latest
 
 # Install Hermes Agent CLI (multi-provider AI agent)
-RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
-ENV PATH="/root/.hermes/bin:${PATH}"
+# PyPI package with [web] extra for `hermes ui` server (fastapi + uvicorn)
+RUN uv tool install "hermes-agent[web]"
 
 # Timezone
 ENV TZ=America/Sao_Paulo
