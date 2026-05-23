@@ -86,18 +86,27 @@ def proxy_http(subpath: str = ""):
 
     content_type = upstream.headers.get("content-type", "")
     is_html = "text/html" in content_type
+    is_js = "javascript" in content_type
 
-    if is_html:
-        # Buffer HTML to rewrite absolute asset paths.
-        # Hermes UI serves assets at /assets/*, /favicon.ico, etc.
+    if is_html or is_js:
+        # Buffer text responses to rewrite absolute paths.
+        # Hermes UI serves assets at /assets/* and makes API calls to /api/*.
         # Behind /hermes-ui/ proxy these must become /hermes-ui/assets/* etc.
         body = upstream.content.decode("utf-8", errors="replace")
-        body = body.replace('src="/', 'src="/hermes-ui/')
-        body = body.replace("src='/", "src='/hermes-ui/")
-        body = body.replace('href="/', 'href="/hermes-ui/')
-        body = body.replace("href='/", "href='/hermes-ui/")
-        body = body.replace('action="/', 'action="/hermes-ui/')
-        body = body.replace("action='/", "action='/hermes-ui/")
+        if is_html:
+            body = body.replace('src="/', 'src="/hermes-ui/')
+            body = body.replace("src='/", "src='/hermes-ui/")
+            body = body.replace('href="/', 'href="/hermes-ui/')
+            body = body.replace("href='/", "href='/hermes-ui/")
+            body = body.replace('action="/', 'action="/hermes-ui/')
+            body = body.replace("action='/", "action='/hermes-ui/")
+        # JS: rewrite fetch/axios calls with absolute paths
+        body = body.replace('"/api/', '"/hermes-ui/api/')
+        body = body.replace("'/api/", "'/hermes-ui/api/")
+        body = body.replace('`/api/', '`/hermes-ui/api/')
+        body = body.replace('"/ws', '"/hermes-ui/ws')
+        body = body.replace("'/ws", "'/hermes-ui/ws")
+        body = body.replace('`/ws', '`/hermes-ui/ws')
         response = Response(body, status=upstream.status_code, content_type=content_type)
     else:
         response = Response(

@@ -125,11 +125,23 @@ fi
 node /workspace/dashboard/terminal-server/bin/server.js --port "${TERMINAL_PORT}" &
 TERMINAL_PID=$!
 
-# Start Hermes dashboard in the background (if hermes is installed).
+# Start Hermes dashboard + API server in the background (if hermes is installed).
 # Non-critical: if hermes crashes, log it but don't kill the container.
 HERMES_PID=""
+# EvoNexus-prefixed env vars → Hermes native env vars.
+# Use EVONEXUS_HERMES_* in docker-compose to avoid clashing with
+# standalone Hermes installations.
+HERMES_API_PORT="${EVONEXUS_HERMES_API_PORT:-8642}"
 if command -v hermes &>/dev/null; then
-    echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT}"
+    export HERMES_DASHBOARD=1
+    export HERMES_DASHBOARD_HOST=127.0.0.1
+    export HERMES_DASHBOARD_PORT="${HERMES_UI_PORT}"
+    export API_SERVER_ENABLED="${EVONEXUS_HERMES_API_ENABLED:-true}"
+    export API_SERVER_HOST=127.0.0.1
+    export API_SERVER_PORT="${HERMES_API_PORT}"
+    [ -n "${EVONEXUS_HERMES_API_KEY:-}" ] && export API_SERVER_KEY="${EVONEXUS_HERMES_API_KEY}"
+
+    echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT} (API on :${HERMES_API_PORT})"
     (hermes dashboard --port "${HERMES_UI_PORT}" --host 127.0.0.1 --no-open || echo "[start-dashboard] hermes dashboard exited with code $?") &
     HERMES_PID=$!
 else
