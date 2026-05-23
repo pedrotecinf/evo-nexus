@@ -190,13 +190,24 @@ class ClaudeBridge {
         // --dangerously-skip-permissions is not applicable
         args = ['chat'];
         if (agent) {
-          args.unshift('--skills', agent);
+          // EvoNexus agents are NOT hermes skills — don't use --skills.
+          // Instead, inject agent persona via -z (initial prompt).
+          const agentFile = path.join(workingDir, '.claude', 'agents', `${agent}.md`);
+          let agentPrompt = '';
+          try {
+            const content = fs.readFileSync(agentFile, 'utf8');
+            const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+            agentPrompt = match ? match[1].trim() : content;
+          } catch {
+            agentPrompt = `You are the ${agent} agent.`;
+          }
+          args.push('-z', `You are ${agent}. Follow these instructions:\n\n${agentPrompt}`);
         }
       } else if (agent) {
         args.push('--agent', agent);
       }
 
-      // Hermes handles agent selection via --skills flag above.
+      // Hermes handles agent persona via -z flag above.
       // For non-Anthropic CLI providers (openclaude), use --system-prompt to
       // force agent persona. Hermes does not need this override.
       const initialAgentSlash = null;
