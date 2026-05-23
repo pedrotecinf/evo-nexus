@@ -424,9 +424,23 @@ export default function Providers() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-semibold text-white truncate">{prov.name}</h3>
-                      <code className="text-[9px] px-1.5 py-0.5 rounded bg-[#152030] text-[#5a6b7f] border border-[#1e2a3a] shrink-0">
-                        {prov.cli_command}
-                      </code>
+                      {prov.cli_options && prov.cli_options.length > 1 ? (
+                        <div className="flex gap-1 shrink-0">
+                          {prov.cli_options.map((cli) => (
+                            <code key={cli} className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${
+                              cli === prov.cli_command
+                                ? 'bg-[#00FFA7]/10 text-[#00FFA7] border-[#00FFA7]/30'
+                                : 'bg-[#152030] text-[#3d4f65] border-[#1e2a3a]'
+                            }`}>
+                              {cli}
+                            </code>
+                          ))}
+                        </div>
+                      ) : (
+                        <code className="text-[9px] px-1.5 py-0.5 rounded bg-[#152030] text-[#5a6b7f] border border-[#1e2a3a] shrink-0">
+                          {prov.cli_command}
+                        </code>
+                      )}
                       {!isInstalled && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1a0a0a] text-[#f87171] border border-[#3a1515] shrink-0">
                           not installed
