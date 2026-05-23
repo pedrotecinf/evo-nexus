@@ -80,14 +80,15 @@ fi
 node /workspace/dashboard/terminal-server/bin/server.js --port "${TERMINAL_PORT}" &
 TERMINAL_PID=$!
 
-# Start Hermes UI in the background (if hermes is installed)
+# Start Hermes dashboard in the background (if hermes is installed).
+# Non-critical: if hermes crashes, log it but don't kill the container.
 HERMES_PID=""
 if command -v hermes &>/dev/null; then
-    echo "[start-dashboard] starting Hermes UI on :${HERMES_UI_PORT}"
-    hermes ui --port "${HERMES_UI_PORT}" &
+    echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT}"
+    (hermes dashboard --port "${HERMES_UI_PORT}" --host 127.0.0.1 --no-open || echo "[start-dashboard] hermes dashboard exited with code $?") &
     HERMES_PID=$!
 else
-    echo "[start-dashboard] hermes not found, skipping Hermes UI"
+    echo "[start-dashboard] hermes not found, skipping Hermes dashboard"
 fi
 
 # Start Flask in the background
@@ -106,9 +107,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Wait for EITHER process to exit, then propagate the exit code. Swarm
-# restart_policy will bring the whole container back up on any failure.
-wait -n
+# Wait for EITHER critical process to exit, then propagate the exit code.
+# Hermes is non-critical — only Flask and terminal-server trigger restart.
+wait -n "${TERMINAL_PID}" "${FLASK_PID}"
 EXIT_CODE=$?
-echo "[start-dashboard] a child process exited with code ${EXIT_CODE}"
+echo "[start-dashboard] a critical process exited with code ${EXIT_CODE}"
 exit "${EXIT_CODE}"
