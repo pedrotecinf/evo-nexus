@@ -104,7 +104,7 @@ if command -v hermes &>/dev/null; then
             # Copy base config (.env, config.yaml) from default profile so
             # each agent profile inherits provider/API key settings.
             HERMES_HOME="/root/.hermes"
-            for cfg in ".env" "config.yaml"; do
+            for cfg in ".env" "config.yaml" "auth.json"; do
                 if [ -f "${HERMES_HOME}/${cfg}" ] && [ ! -f "${profile_dir}/${cfg}" ]; then
                     cp "${HERMES_HOME}/${cfg}" "${profile_dir}/${cfg}"
                 fi
