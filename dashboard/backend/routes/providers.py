@@ -64,8 +64,52 @@ ALLOWED_ENV_VARS = frozenset({
 })
 
 
+_STRUCTURAL_KEYS = frozenset({
+    "cli_options", "cli_env_presets", "description", "setup_hint",
+    "mode_overrides", "name", "requires_logout",
+})
+
+
+def _merge_from_example(config: dict) -> bool:
+    """Backfill structural fields from providers.example.json.
+
+    Adds new providers entirely and fills missing structural keys on
+    existing providers. Never overwrites user-populated values like
+    env_vars, cli_command, default_base_url, or default_model.
+    Returns True if config was modified.
+    """
+    example_path = PROVIDERS_CONFIG.parent / "providers.example.json"
+    if not example_path.is_file():
+        return False
+    try:
+        example = json.loads(example_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+
+    changed = False
+    ex_provs = example.get("providers", {})
+    live_provs = config.setdefault("providers", {})
+
+    for key, ex_entry in ex_provs.items():
+        if key not in live_provs:
+            live_provs[key] = ex_entry
+            changed = True
+            continue
+        live = live_provs[key]
+        for field in _STRUCTURAL_KEYS:
+            if field not in live and field in ex_entry:
+                live[field] = ex_entry[field]
+                changed = True
+    return changed
+
+
 def _read_config() -> dict:
-    """Read providers.json. If missing, copy from providers.example.json."""
+    """Read providers.json. If missing, copy from providers.example.json.
+
+    On every read, backfill structural fields from the example so that
+    new provider features (cli_options, cli_env_presets, etc.) propagate
+    to existing installations without losing user config.
+    """
     try:
         if not PROVIDERS_CONFIG.is_file():
             example = PROVIDERS_CONFIG.parent / "providers.example.json"
@@ -73,7 +117,10 @@ def _read_config() -> dict:
                 import shutil as _shutil
                 _shutil.copy2(example, PROVIDERS_CONFIG)
         if PROVIDERS_CONFIG.is_file():
-            return json.loads(PROVIDERS_CONFIG.read_text(encoding="utf-8"))
+            config = json.loads(PROVIDERS_CONFIG.read_text(encoding="utf-8"))
+            if _merge_from_example(config):
+                _write_config(config)
+            return config
     except (json.JSONDecodeError, OSError):
         pass
     return {"active_provider": "anthropic", "providers": {}}
