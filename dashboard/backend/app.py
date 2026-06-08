@@ -837,7 +837,7 @@ from routes.triggers import bp as triggers_bp
 from routes.terminal_proxy import bp as terminal_proxy_bp, register_websocket_proxy as _register_terminal_ws
 from routes.backups import bp as backups_bp
 from routes.providers import bp as providers_bp
-from routes.hermes_proxy import bp as hermes_proxy_bp
+from routes.hermes_proxy import bp as hermes_proxy_bp, register_websocket_proxy as _register_hermes_ws
 from routes.settings import bp as settings_bp
 from routes.shares import bp as shares_bp
 from routes.heartbeats import bp as heartbeats_bp
@@ -902,6 +902,10 @@ try:
     from flask_sock import Sock as _Sock
     _terminal_sock = _Sock(app)
     _register_terminal_ws(_terminal_sock)
+    # Reuse the same Sock instance for the Hermes chat WebSocket bridge.
+    # Without this the Hermes UI chat terminal's pty/ws/events sockets have
+    # nothing to upgrade against and close with code 1006.
+    _register_hermes_ws(_terminal_sock)
 except Exception as _exc:
     import logging as _logging
     _logging.getLogger(__name__).warning(
