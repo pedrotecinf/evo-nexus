@@ -7,6 +7,7 @@ import { initEvoNexusSdk } from './lib/evonexus-sdk'
 import PluginPageHost from './pages/PluginPageHost'
 import { NotificationProvider } from './context/NotificationContext'
 import Sidebar from './components/Sidebar'
+import HermesFrameHost from './components/HermesFrameHost'
 import { FullPageLoader, SectionBoundary, SectionLoader } from './components/PageStates'
 import { lazyDefault, lazyNamed } from './lib/lazyImport'
 
@@ -34,7 +35,6 @@ const MemPalace = lazyDefault(() => import('./pages/MemPalace'))
 const Triggers = lazyDefault(() => import('./pages/Triggers'))
 const Backups = lazyDefault(() => import('./pages/Backups'))
 const Providers = lazyDefault(() => import('./pages/Providers'))
-const HermesUI = lazyDefault(() => import('./pages/HermesUI'))
 const Workspace = lazyDefault(() => import('./pages/Workspace'))
 const Settings = lazyDefault(() => import('./pages/Settings'))
 const ShareLinks = lazyDefault(() => import('./pages/ShareLinks'))
@@ -126,6 +126,7 @@ function AppContent() {
   const isAgentDetail = /^\/agents\/[^/]+$/.test(location.pathname)
   const isTicketDetail = /^\/tickets\/[^/]+$/.test(location.pathname)
   const isWorkspace = location.pathname === '/workspace' || location.pathname.startsWith('/workspace/')
+  const isHermes = location.pathname === '/hermes'
   const { user, loading, needsSetup, hasPermission } = useAuth()
   const extUser = user as (typeof user & OnboardingUser) | null
 
@@ -219,11 +220,15 @@ function AppContent() {
         {/* Pages - responsive margin */}
         <main
           className={
-            isAgentDetail || isWorkspace || isTicketDetail
+            isAgentDetail || isWorkspace || isTicketDetail || isHermes
               ? 'flex-1 ml-0 lg:ml-60 pt-14 lg:pt-0 h-screen overflow-hidden'
               : 'flex-1 ml-0 lg:ml-60 p-4 lg:p-8 pt-16 lg:pt-8 overflow-auto'
           }
         >
+          {/* Persistent Hermes iframe host — mounted outside <Routes> so it
+              survives navigation (no bundle reload on tab reopen). Hidden via
+              display:none when not on /hermes. Lazy: iframe created on first open. */}
+          {hasPermission('config', 'view') && <HermesFrameHost visible={isHermes} />}
           <DashboardRouteFrame locationKey={routeKey}>
             <Routes>
               {/* Onboarding & Settings routes (lazy — keep their own suspense so they
@@ -262,7 +267,9 @@ function AppContent() {
               {hasPermission('config', 'view') && <Route path="/backups" element={<Backups />} />}
               <Route path="/config" element={<Navigate to="/settings" replace />} />
               <Route path="/providers" element={<Providers />} />
-              {hasPermission('config', 'view') && <Route path="/hermes" element={<HermesUI />} />}
+              {/* /hermes content is rendered by the persistent HermesFrameHost above,
+                  not here — this route is a no-op placeholder so navigation matches. */}
+              {hasPermission('config', 'view') && <Route path="/hermes" element={null} />}
               {hasPermission('users', 'view') && <Route path="/users" element={<Users />} />}
               {hasPermission('audit', 'view') && <Route path="/audit" element={<Audit />} />}
               {hasPermission('users', 'manage') && <Route path="/roles" element={<Roles />} />}
