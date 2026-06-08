@@ -6,7 +6,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const pty = require('node-pty');
 const {
   loadProviderConfig,
   resolveProviderModel,
@@ -277,7 +276,14 @@ class ChatBridge {
 
   _stripAnsi(text) {
     if (typeof text !== 'string') return '';
-    return text.replace(/\x1b\[[0-9;]*[mGKH]/g, '');
+    return text
+      // OSC sequences: ESC ] ... (BEL | ST). Covers color/title queries like
+      // `ESC ]11;?BEL` that leak as `]11;?` when a TTY is attached.
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      // CSI sequences: ESC [ ... final-byte (covers SGR colors, cursor moves, etc.)
+      .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+      // Stray single-shot / control introducers that may survive truncation.
+      .replace(/\x1b[=>]/g, '');
   }
 
   async _rmrfSafe(dir) {
@@ -383,13 +389,19 @@ class ChatBridge {
 
     console.log(`[chat-bridge] Starting Hermes session ${sessionId}: ${hermesBin} ${hermesArgs.join(' ')}`);
 
-    const hermesProcess = pty.spawn(hermesBin, hermesArgs, {
+    // Spawn with plain pipes (NOT a pty). A pty makes Hermes/Claude think a
+    // TTY is attached, so it emits OSC capability queries (e.g. `ESC ]11;?`,
+    // which leaked as `]11;?` in the chat) and, on Linux, the pty master fd
+    // raises a benign `read EIO` when the child exits — surfaced to the user
+    // as a spurious error. Pipes mirror the working hermes_native.py path.
+    const { spawn } = require('child_process');
+    const hermesProcess = spawn(hermesBin, hermesArgs, {
       cwd: workingDir || process.cwd(),
-      env,
-      cols: 120,
-      rows: 40,
-      name: 'xterm-color',
+      env: { ...env, TERM: 'dumb', NO_COLOR: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    hermesProcess.stdout.setEncoding('utf8');
+    hermesProcess.stderr.setEncoding('utf8');
 
     const session = {
       active: true,
@@ -400,13 +412,14 @@ class ChatBridge {
     this.sessions.set(sessionId, session);
 
     let outputBuffer = '';
+    let settled = false;
 
     if (onMessage) {
       onMessage({ type: 'message_start' });
       onMessage({ type: 'text_start' });
     }
 
-    hermesProcess.onData((data) => {
+    hermesProcess.stdout.on('data', (data) => {
       if (!session.active) return;
       const clean = this._stripAnsi(data);
       if (clean.trim() && onMessage) {
@@ -418,14 +431,25 @@ class ChatBridge {
       }
     });
 
-    hermesProcess.onExit(({ exitCode }) => {
-      console.log(`[chat-bridge] Hermes session ${sessionId} exited with code ${exitCode}`);
+    // Hermes logs diagnostics to stderr; capture for debugging but don't stream
+    // it into the chat as assistant text.
+    hermesProcess.stderr.on('data', (data) => {
+      const txt = typeof data === 'string' ? data : data.toString('utf8');
+      if (txt.trim()) console.error(`[chat-bridge] Hermes ${sessionId} stderr: ${txt.trim().slice(0, 500)}`);
+    });
+
+    // 'close' fires after stdio streams have flushed and the process has exited
+    // — more reliable than 'exit' for ensuring all output was delivered.
+    hermesProcess.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      console.log(`[chat-bridge] Hermes session ${sessionId} exited with code ${code}`);
       if (onMessage) {
         onMessage({ type: 'message_stop' });
         onMessage({
           type: 'result',
-          subtype: exitCode === 0 ? 'success' : 'error',
-          isError: exitCode !== 0,
+          subtype: code === 0 ? 'success' : 'error',
+          isError: code !== 0 && code !== null,
         });
       }
       session.active = false;
@@ -435,6 +459,8 @@ class ChatBridge {
     });
 
     hermesProcess.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       console.error(`[chat-bridge] Hermes session ${sessionId} error:`, err.message);
       session.active = false;
       this.sessions.delete(sessionId);
@@ -839,7 +865,7 @@ class ChatBridge {
     const sdkSessionId = session.sdkSessionId;
     session.active = false;
 
-    // Kill Hermes PTY process if present
+    // Kill Hermes child process if present
     if (session.hermesProcess) {
       try { session.hermesProcess.kill(); } catch {}
     }
