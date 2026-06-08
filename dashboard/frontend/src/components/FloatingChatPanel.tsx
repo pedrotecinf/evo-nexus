@@ -1,16 +1,25 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, X, Maximize2, Minimize2, MessageSquare } from 'lucide-react'
+import { Plus, X, Maximize2, Minimize2, MessageSquare, History } from 'lucide-react'
 import { useFloatingChat } from '../context/FloatingChatContext'
 import { AgentAvatar } from './AgentAvatar'
+import { TS_HTTP } from '../lib/terminal-url'
 
 interface AgentItem {
   name: string
   description?: string
 }
 
+interface SessionItem {
+  id: string
+  agentName: string | null
+  active: boolean
+  preview?: string
+}
+
 export default function FloatingChatPanel() {
   const { windows, openWindow, closeWindow, toggleMinimize, setPanelOpen } = useFloatingChat()
   const [agents, setAgents] = useState<AgentItem[]>([])
+  const [sessions, setSessions] = useState<SessionItem[]>([])
   const [search, setSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
   const [loadingAgent, setLoadingAgent] = useState<string | null>(null)
@@ -26,6 +35,16 @@ export default function FloatingChatPanel() {
         } else if (Array.isArray(data)) {
           setAgents(data.map((a: any) => ({ name: a.name || a.slug, description: a.description })))
         }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Load all active sessions (including ones started outside the floating chat)
+  useEffect(() => {
+    fetch(`${TS_HTTP}/api/sessions`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.sessions) setSessions(data.sessions as SessionItem[])
       })
       .catch(() => {})
   }, [])
@@ -53,6 +72,18 @@ export default function FloatingChatPanel() {
     setShowPicker(false)
     setSearch('')
   }
+
+  const handleContinueSession = async (s: SessionItem) => {
+    if (!s.agentName) return
+    setLoadingAgent(s.id)
+    await openWindow(s.agentName, s.id)
+    setLoadingAgent(null)
+  }
+
+  // External sessions not already open in the floating chat
+  const externalSessions = sessions.filter(
+    s => s.agentName && !windows.some(w => w.id === s.agentName && w.sessionId === s.id)
+  )
 
   return (
     <div
@@ -117,6 +148,37 @@ export default function FloatingChatPanel() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Active sessions started outside the floating chat */}
+      {externalSessions.length > 0 && (
+        <div className="py-1 border-b border-[#21262d]">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-wide text-[#667085]">
+            <History size={10} />
+            Sessões ativas
+          </div>
+          <div className="max-h-44 overflow-y-auto">
+            {externalSessions.map(s => (
+              <button
+                key={s.id}
+                onClick={() => handleContinueSession(s)}
+                disabled={loadingAgent === s.id}
+                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 transition-colors text-left disabled:opacity-50"
+              >
+                <AgentAvatar name={s.agentName!} size={20} />
+                <span className="flex flex-col min-w-0 flex-1">
+                  <span className="text-xs text-[#e6edf3] truncate">@{s.agentName}</span>
+                  {s.preview && (
+                    <span className="text-[10px] text-[#667085] truncate">{s.preview}</span>
+                  )}
+                </span>
+                {s.active && (
+                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[#00FFA7]" title="Ativa" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

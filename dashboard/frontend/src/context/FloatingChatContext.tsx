@@ -7,7 +7,12 @@ export interface FloatWindow {
   minimized: boolean
   viewMode: 'terminal' | 'chat'
   pendingApprovals: number
+  width: number        // resizable window width (px)
 }
+
+const DEFAULT_WIDTH = 380
+const MIN_WIDTH = 320
+const MAX_WIDTH = 900
 
 interface FloatingChatState {
   windows: FloatWindow[]
@@ -17,6 +22,7 @@ interface FloatingChatState {
   toggleMinimize: (agent: string) => void
   toggleViewMode: (agent: string) => void
   updateApprovals: (agent: string, count: number) => void
+  setWindowWidth: (agent: string, width: number) => void
   setPanelOpen: (v: boolean) => void
 }
 
@@ -39,12 +45,26 @@ function loadWindows(): Array<{ id: string; sessionId: string; minimized: boolea
   } catch { return [] }
 }
 
+function loadWidth(agent: string): number {
+  try {
+    const raw = localStorage.getItem(`evo:float-width-${agent}`)
+    const n = raw ? parseInt(raw, 10) : NaN
+    if (!Number.isNaN(n)) return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, n))
+  } catch {}
+  return DEFAULT_WIDTH
+}
+
 async function getOrCreateSession(agent: string, existingSessionId?: string): Promise<string> {
-  // 1. Use explicitly passed sessionId
-  if (existingSessionId) return existingSessionId
+  const storageKey = `evo:float-session-${agent}`
+
+  // 1. Use explicitly passed sessionId (e.g. continuing an external session)
+  //    and persist it as the agent's current session.
+  if (existingSessionId) {
+    try { sessionStorage.setItem(storageKey, existingSessionId) } catch {}
+    return existingSessionId
+  }
 
   // 2. Check sessionStorage for a previously created session
-  const storageKey = `evo:float-session-${agent}`
   const stored = sessionStorage.getItem(storageKey)
   if (stored) return stored
 
@@ -85,6 +105,7 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
           try { return (localStorage.getItem(`evo:float-view-${w.id}`) as 'terminal' | 'chat') || 'terminal' } catch { return 'terminal' }
         })(),
         pendingApprovals: 0,
+        width: loadWidth(w.id),
       }))
       setWindowsState(restored)
     }
@@ -99,10 +120,13 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const openWindow = useCallback(async (agent: string, sessionId?: string) => {
-    // If already open, just un-minimize and bring to front
+    // If already open: un-minimize, and switch to an explicit external session if one was passed.
     const existing = windows.find(w => w.id === agent)
     if (existing) {
-      setWindows(prev => prev.map(w => w.id === agent ? { ...w, minimized: false } : w))
+      const sid = sessionId && sessionId !== existing.sessionId
+        ? await getOrCreateSession(agent, sessionId)
+        : existing.sessionId
+      setWindows(prev => prev.map(w => w.id === agent ? { ...w, minimized: false, sessionId: sid } : w))
       setPanelOpen(false)
       return
     }
@@ -114,7 +138,7 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
 
     setWindows(prev => [
       ...prev,
-      { id: agent, sessionId: sid, minimized: false, viewMode, pendingApprovals: 0 },
+      { id: agent, sessionId: sid, minimized: false, viewMode, pendingApprovals: 0, width: loadWidth(agent) },
     ])
     setPanelOpen(false)
   }, [windows, setWindows])
@@ -140,6 +164,12 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
     setWindowsState(prev => prev.map(w => w.id === agent ? { ...w, pendingApprovals: count } : w))
   }, [])
 
+  const setWindowWidth = useCallback((agent: string, width: number) => {
+    const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(width)))
+    try { localStorage.setItem(`evo:float-width-${agent}`, String(clamped)) } catch {}
+    setWindowsState(prev => prev.map(w => w.id === agent ? { ...w, width: clamped } : w))
+  }, [])
+
   return (
     <FloatingChatContext.Provider value={{
       windows,
@@ -149,6 +179,7 @@ export function FloatingChatProvider({ children }: { children: ReactNode }) {
       toggleMinimize,
       toggleViewMode,
       updateApprovals,
+      setWindowWidth,
       setPanelOpen,
     }}>
       {children}

@@ -11,12 +11,21 @@ export default function FloatingChatFab() {
 
   // Show up to 3 non-minimized windows; rest accessible from panel
   const visibleWindows = windows.slice(0, 3)
+  const GAP = 12
+
+  // Each window is anchored to the right; offset accumulates real widths to its right.
+  let acc = GAP
+  const offsets = visibleWindows.map(win => {
+    const right = acc
+    acc += win.width + GAP
+    return right
+  })
 
   return (
     <>
       {/* Floating windows */}
       {visibleWindows.map((win, idx) => (
-        <FloatingChatWindow key={win.id} window={win} index={idx} />
+        <FloatingChatWindow key={win.id} window={win} rightOffset={offsets[idx]} />
       ))}
 
       {/* Panel */}
