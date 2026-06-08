@@ -6,6 +6,8 @@ import { hydratePluginUiRegistry } from './lib/plugin-ui-registry'
 import { initEvoNexusSdk } from './lib/evonexus-sdk'
 import PluginPageHost from './pages/PluginPageHost'
 import { NotificationProvider } from './context/NotificationContext'
+import { FloatingChatProvider } from './context/FloatingChatContext'
+import FloatingChatFab from './components/FloatingChatFab'
 import Sidebar from './components/Sidebar'
 import HermesFrameHost from './components/HermesFrameHost'
 import { FullPageLoader, SectionBoundary, SectionLoader } from './components/PageStates'
@@ -214,6 +216,7 @@ function AppContent() {
 
   return (
     <NotificationProvider>
+      <FloatingChatProvider>
       <div className="flex min-h-screen bg-[#0C111D]">
         <Sidebar />
 
@@ -305,7 +308,13 @@ function AppContent() {
             </Routes>
           </DashboardRouteFrame>
         </main>
+
+        {/* Floating chat widget — hidden on fullscreen pages */}
+        {!isAgentDetail && !isWorkspace && !isHermes && (
+          <FloatingChatFab />
+        )}
       </div>
+      </FloatingChatProvider>
     </NotificationProvider>
   )
 }

@@ -1,0 +1,163 @@
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { TS_HTTP } from '../lib/terminal-url'
+
+export interface FloatWindow {
+  id: string           // agent slug (unique key)
+  sessionId: string    // terminal-server session id
+  minimized: boolean
+  viewMode: 'terminal' | 'chat'
+  pendingApprovals: number
+}
+
+interface FloatingChatState {
+  windows: FloatWindow[]
+  panelOpen: boolean
+  openWindow: (agent: string, sessionId?: string) => Promise<void>
+  closeWindow: (agent: string) => void
+  toggleMinimize: (agent: string) => void
+  toggleViewMode: (agent: string) => void
+  updateApprovals: (agent: string, count: number) => void
+  setPanelOpen: (v: boolean) => void
+}
+
+const FloatingChatContext = createContext<FloatingChatState | null>(null)
+
+const STORAGE_KEY = 'evo:float-windows'
+
+function persistWindows(windows: FloatWindow[]) {
+  try {
+    const slim = windows.map(w => ({ id: w.id, sessionId: w.sessionId, minimized: w.minimized }))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(slim))
+  } catch {}
+}
+
+function loadWindows(): Array<{ id: string; sessionId: string; minimized: boolean }> {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    return JSON.parse(raw)
+  } catch { return [] }
+}
+
+async function getOrCreateSession(agent: string, existingSessionId?: string): Promise<string> {
+  // 1. Use explicitly passed sessionId
+  if (existingSessionId) return existingSessionId
+
+  // 2. Check sessionStorage for a previously created session
+  const storageKey = `evo:float-session-${agent}`
+  const stored = sessionStorage.getItem(storageKey)
+  if (stored) return stored
+
+  // 3. Create new session
+  try {
+    const res = await fetch(`${TS_HTTP}/api/sessions/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName: agent }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const sessionId: string = data.sessionId
+      sessionStorage.setItem(storageKey, sessionId)
+      return sessionId
+    }
+  } catch {}
+
+  // Fallback: generate local id (terminal will create session on connect)
+  const fallback = `float-${agent}-${Math.random().toString(36).slice(2, 8)}`
+  sessionStorage.setItem(storageKey, fallback)
+  return fallback
+}
+
+export function FloatingChatProvider({ children }: { children: ReactNode }) {
+  const [windows, setWindowsState] = useState<FloatWindow[]>([])
+  const [panelOpen, setPanelOpen] = useState(false)
+
+  // Restore windows from sessionStorage on mount
+  useEffect(() => {
+    const saved = loadWindows()
+    if (saved.length > 0) {
+      const restored: FloatWindow[] = saved.map(w => ({
+        id: w.id,
+        sessionId: w.sessionId,
+        minimized: w.minimized,
+        viewMode: (() => {
+          try { return (localStorage.getItem(`evo:float-view-${w.id}`) as 'terminal' | 'chat') || 'terminal' } catch { return 'terminal' }
+        })(),
+        pendingApprovals: 0,
+      }))
+      setWindowsState(restored)
+    }
+  }, [])
+
+  const setWindows = useCallback((updater: FloatWindow[] | ((prev: FloatWindow[]) => FloatWindow[])) => {
+    setWindowsState(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      persistWindows(next)
+      return next
+    })
+  }, [])
+
+  const openWindow = useCallback(async (agent: string, sessionId?: string) => {
+    // If already open, just un-minimize and bring to front
+    const existing = windows.find(w => w.id === agent)
+    if (existing) {
+      setWindows(prev => prev.map(w => w.id === agent ? { ...w, minimized: false } : w))
+      setPanelOpen(false)
+      return
+    }
+
+    const sid = await getOrCreateSession(agent, sessionId)
+    const viewMode: 'terminal' | 'chat' = (() => {
+      try { return (localStorage.getItem(`evo:float-view-${agent}`) as 'terminal' | 'chat') || 'terminal' } catch { return 'terminal' }
+    })()
+
+    setWindows(prev => [
+      ...prev,
+      { id: agent, sessionId: sid, minimized: false, viewMode, pendingApprovals: 0 },
+    ])
+    setPanelOpen(false)
+  }, [windows, setWindows])
+
+  const closeWindow = useCallback((agent: string) => {
+    setWindows(prev => prev.filter(w => w.id !== agent))
+  }, [setWindows])
+
+  const toggleMinimize = useCallback((agent: string) => {
+    setWindows(prev => prev.map(w => w.id === agent ? { ...w, minimized: !w.minimized } : w))
+  }, [setWindows])
+
+  const toggleViewMode = useCallback((agent: string) => {
+    setWindows(prev => prev.map(w => {
+      if (w.id !== agent) return w
+      const next: 'terminal' | 'chat' = w.viewMode === 'terminal' ? 'chat' : 'terminal'
+      try { localStorage.setItem(`evo:float-view-${agent}`, next) } catch {}
+      return { ...w, viewMode: next }
+    }))
+  }, [setWindows])
+
+  const updateApprovals = useCallback((agent: string, count: number) => {
+    setWindowsState(prev => prev.map(w => w.id === agent ? { ...w, pendingApprovals: count } : w))
+  }, [])
+
+  return (
+    <FloatingChatContext.Provider value={{
+      windows,
+      panelOpen,
+      openWindow,
+      closeWindow,
+      toggleMinimize,
+      toggleViewMode,
+      updateApprovals,
+      setPanelOpen,
+    }}>
+      {children}
+    </FloatingChatContext.Provider>
+  )
+}
+
+export function useFloatingChat(): FloatingChatState {
+  const ctx = useContext(FloatingChatContext)
+  if (!ctx) throw new Error('useFloatingChat must be used inside FloatingChatProvider')
+  return ctx
+}
