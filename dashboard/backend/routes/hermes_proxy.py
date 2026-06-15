@@ -279,7 +279,15 @@ def register_websocket_proxy(sock) -> None:
             while not stop.is_set():
                 msg = client_ws.receive(timeout=30)
                 if msg is None:
-                    break
+                    # Idle timeout, NOT a close: simple_websocket.receive()
+                    # returns None when no frame arrives within `timeout` while
+                    # the connection is still alive (a real close raises
+                    # ConnectionClosed, handled by the except below). Loop to
+                    # re-check stop.is_set() and keep waiting. Breaking here
+                    # tore down healthy sockets after a ~30s pause with no
+                    # client frame, which the browser surfaced as
+                    # `[session ended (code 1006)]` a few minutes into a chat.
+                    continue
                 upstream.send(msg)
         except Exception:
             pass
