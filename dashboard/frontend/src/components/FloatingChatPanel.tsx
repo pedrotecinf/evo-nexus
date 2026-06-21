@@ -62,7 +62,7 @@ export default function FloatingChatPanel() {
   }, [setPanelOpen])
 
   const filteredAgents = agents.filter(a =>
-    a.name.toLowerCase().includes(search.toLowerCase())
+    a.name.toLowerCase().includes(search.toLowerCase().replace(/^@/, ''))
   )
 
   const handleOpenAgent = async (agentName: string) => {

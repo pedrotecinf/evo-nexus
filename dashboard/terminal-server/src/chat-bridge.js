@@ -337,35 +337,24 @@ class ChatBridge {
       return { sessionId, sdkSessionId: null };
     }
 
-    // Apply the agent the same way the SDK path does: load the agent's
-    // definition from .claude/agents/{name}.md and inject its prompt as a
-    // system-context block prefixed to the query. We must NOT pass the agent
-    // name as `--skills <name>` — Hermes treats `--skills` as skill IDs, and
-    // an agent slug like `oracle` (which only exists as an agent, not a skill)
-    // makes Hermes exit with `Unknown skill(s): oracle`, killing the pty and
-    // surfacing `read EIO` on the client. See CLA-27.
-    let agentPrompt = '';
-    if (agentName) {
-      const agentDef = loadAgentFile(agentName, workingDir || process.cwd());
-      if (agentDef?.prompt) {
-        agentPrompt = agentDef.prompt;
-      }
-    }
-
-    // The Hermes route is one-shot (a fresh process per message, no resume),
-    // so the agent/system context must be re-injected on every turn.
+    // Load agent via Hermes -p profile flag, mirroring how terminal mode works
+    // (claude-bridge.js uses `hermes -p <agent> chat`). The -p flag loads the
+    // agent's Hermes profile (SOUL.md), which is synced from .claude/agents/*.md
+    // on container startup. Injecting the agent prompt as user-message content
+    // (the old approach) didn't work — Hermes ignored the `# System / Agent context`
+    // block because it arrived as user input, not as a system/profile instruction.
+    // We must NOT pass agent names via `--skills` — Hermes treats those as skill IDs
+    // and exits with `Unknown skill(s)` if the name only exists as an agent. See CLA-27.
     const promptParts = [];
-    if (agentPrompt) {
-      promptParts.push(`# System / Agent context\n${agentPrompt}`);
-    }
     if (systemPromptExtras) {
       promptParts.push(systemPromptExtras);
     }
-    promptParts.push(`# User\n${typeof prompt === 'string' ? prompt : ''}`);
+    promptParts.push(typeof prompt === 'string' ? prompt : '');
     const userPrompt = promptParts.join('\n\n---\n\n');
 
-    // Build hermes args: chat -Q -q "prompt". No `--skills` for agent slugs.
-    const hermesArgs = ['chat', '-Q', '-q', userPrompt];
+    // Build hermes args: [-p agentName] chat -Q -q "prompt".
+    const profileArgs = agentName ? ['-p', agentName] : [];
+    const hermesArgs = [...profileArgs, 'chat', '-Q', '-q', userPrompt];
 
     // Resolve hermes binary
     const { execSync } = require('child_process');
