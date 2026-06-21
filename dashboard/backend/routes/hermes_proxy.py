@@ -15,11 +15,14 @@ mechanisms cooperate:
    occurrences are prefixed. Cheap, covers asset imports baked into the
    bundle, but blind to URLs the SPA builds dynamically at runtime
    (e.g. `new WebSocket(`${location.host}/api/pty`)`).
-2. Runtime shim (injected into <head>): monkey-patches WebSocket, fetch
-   and XMLHttpRequest so ANY same-origin /api//ws//assets/ URL — however
-   it was assembled — is rewritten to the /hermes-ui/ prefix. This is what
-   makes the chat terminal's WebSocket reach the proxy instead of hitting
-   the dashboard host at an unprefixed path (which 404s → close code 1006).
+2. Runtime shim (injected into <head>): monkey-patches WebSocket, fetch,
+   XMLHttpRequest, and the <script>.src / <link>.href setters so ANY
+   same-origin /api//ws//assets//dashboard-plugins/ URL — however it was
+   assembled — is rewritten to the /hermes-ui/ prefix. This is what makes
+   the chat terminal's WebSocket reach the proxy instead of hitting the
+   dashboard host at an unprefixed path (which 404s → close code 1006), and
+   what makes the dashboard-plugins loader (kanban/achievements) fetch real
+   plugin JS instead of the SPA's index.html.
 
 HTTP follows terminal_proxy.py; the WebSocket bridge mirrors its
 register_websocket_proxy() and is mounted on the same Sock instance.
@@ -76,17 +79,19 @@ _IFRAME_BLOCK = frozenset(
 )
 
 # Runtime shim injected into the Hermes HTML <head>. Runs before the SPA
-# bundle so every WebSocket/fetch/XHR the app opens is transparently
-# remapped to the /hermes-ui/ prefix on the current origin — covering URLs
-# the bundle builds dynamically that a static string rewrite cannot catch.
+# bundle so every WebSocket/fetch/XHR — plus the src/href of dynamically
+# injected <script>/<link> nodes (the dashboard-plugins loader) — is
+# transparently remapped to the /hermes-ui/ prefix on the current origin,
+# covering URLs the bundle builds dynamically that a static string rewrite
+# cannot catch.
 _SHIM = """<script>(function(){
   var P="/hermes-ui";
   function rw(u){
     try{
       if(typeof u!=="string") return u;
-      if(u.charAt(0)==="/" && u.indexOf(P+"/")!==0 && /^\\/(api|ws|assets|socket\\.io)\\b/.test(u)) return P+u;
+      if(u.charAt(0)==="/" && u.indexOf(P+"/")!==0 && /^\\/(api|ws|assets|socket\\.io|dashboard-plugins)\\b/.test(u)) return P+u;
       var m=u.match(/^(wss?|https?):\\/\\/[^\\/]+(\\/.*)$/i);
-      if(m && m[2].indexOf(P+"/")!==0 && /^\\/(api|ws|assets|socket\\.io)\\b/.test(m[2]))
+      if(m && m[2].indexOf(P+"/")!==0 && /^\\/(api|ws|assets|socket\\.io|dashboard-plugins)\\b/.test(m[2]))
         return m[1]+"://"+location.host+P+m[2];
       return u;
     }catch(e){return u;}
@@ -108,6 +113,20 @@ _SHIM = """<script>(function(){
   if(OX) window.XMLHttpRequest.prototype.open=function(m,u){
     arguments[1]=rw(u); return OX.apply(this,arguments);
   };
+  // The dashboard-plugins loader injects <script src> / <link href> nodes to
+  // load each plugin's bundle. Those bypass fetch/XHR/WebSocket, so patch the
+  // property setters to remap their URLs too — otherwise the browser fetches
+  // /dashboard-plugins/* from the dashboard root and gets the SPA's index.html
+  // back (Unexpected token '<' → the plugin never calls register()).
+  ["HTMLScriptElement","HTMLLinkElement"].forEach(function(n){
+    var pr=window[n]&&window[n].prototype, k=(n==="HTMLLinkElement")?"href":"src";
+    if(!pr) return;
+    var d=Object.getOwnPropertyDescriptor(pr,k);
+    if(!d||!d.set) return;
+    Object.defineProperty(pr,k,{configurable:true,enumerable:d.enumerable,
+      get:function(){return d.get.call(this);},
+      set:function(v){d.set.call(this,(typeof v==="string")?rw(v):v);}});
+  });
 })();</script>"""
 
 
