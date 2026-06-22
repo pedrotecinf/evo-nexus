@@ -22,15 +22,24 @@ class HeartbeatConfig(BaseModel):
     id: Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0-9-]+$")]
     agent: Annotated[str, Field(min_length=1, max_length=100)]
     interval_seconds: Annotated[int, Field(ge=60)]
-    max_turns: Annotated[int, Field(ge=1, le=100)] = 10
+    # max_turns may be 0 ONLY for in-process handler heartbeats (see `handler`
+    # and handler_contract). Claude heartbeats must be >= 1; the per-mode rule
+    # is enforced in the model_validator so the error message is meaningful.
+    max_turns: Annotated[int, Field(ge=0, le=100)] = 10
     timeout_seconds: Annotated[int, Field(ge=30, le=3600)] = 600
     lock_timeout_seconds: Annotated[int, Field(ge=60)] = 1800
     wake_triggers: Annotated[List[WakeTrigger], Field(min_length=1)]
     enabled: bool = False
     goal_id: Optional[str] = None
     required_secrets: List[str] = Field(default_factory=list)
-    decision_prompt: Annotated[str, Field(min_length=20)]
+    # required (>=20 chars) for Claude heartbeats, may be empty for handler
+    # heartbeats; the length rule moved into handler_contract().
+    decision_prompt: str = ""
     source_plugin: Optional[str] = None  # AC4: set to plugin slug for plugin-contributed heartbeats
+    # (Wave 2.2r) optional Python "module.function" run in-process by
+    # heartbeat_runner instead of spawning a Claude CLI subprocess. When set,
+    # max_turns MUST be 0 and decision_prompt may be empty.
+    handler: Optional[str] = None
 
     @field_validator("agent")
     @classmethod
@@ -69,7 +78,36 @@ class HeartbeatConfig(BaseModel):
         return list(dict.fromkeys(v))  # deduplicate preserving order
 
     @model_validator(mode="after")
-    def interval_trigger_requires_interval_field(self) -> "HeartbeatConfig":
+    def handler_contract(self) -> "HeartbeatConfig":
+        """Enforce the handler vs. Claude-heartbeat contract.
+
+        - handler SET   -> in-process Python; max_turns MUST be 0;
+                           decision_prompt may be empty.
+        - handler UNSET -> Claude CLI heartbeat; max_turns MUST be 1..100 and
+                           decision_prompt MUST be >= 20 chars.
+        """
+        handler = (self.handler or "").strip()
+        if handler:
+            if self.max_turns != 0:
+                raise ValueError(
+                    f"Heartbeat '{self.id}' sets handler='{handler}' but "
+                    f"max_turns={self.max_turns}; handler heartbeats must have "
+                    f"max_turns: 0 (no Claude turns are spent)."
+                )
+            # decision_prompt is unconstrained for handler heartbeats.
+        else:
+            if not (1 <= self.max_turns <= 100):
+                raise ValueError(
+                    f"Heartbeat '{self.id}': max_turns must be between 1 and "
+                    f"100 for Claude heartbeats (got {self.max_turns}). "
+                    f"max_turns: 0 is only valid when a 'handler' is set."
+                )
+            if len(self.decision_prompt) < 20:
+                raise ValueError(
+                    f"Heartbeat '{self.id}': decision_prompt must be at least "
+                    f"20 characters for Claude heartbeats (got "
+                    f"{len(self.decision_prompt)})."
+                )
         return self
 
 
