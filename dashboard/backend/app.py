@@ -900,6 +900,13 @@ app.register_blueprint(hermes_proxy_bp)
 # due to CORS preflight + private-network-access policies.
 try:
     from flask_sock import Sock as _Sock
+    # Serialize all writes on each simple_websocket connection so the bridge
+    # pump thread, the bridge main thread (close), and simple-websocket's
+    # internal _thread (Pong/Close) cannot interleave frame bytes — the cause
+    # of the browser-side "WebSocket: Invalid frame header" on the
+    # Hermes/terminal proxies. Must run before the Sock instance is created.
+    from ws_send_lock import install as _install_ws_send_lock
+    _install_ws_send_lock()
     _terminal_sock = _Sock(app)
     _register_terminal_ws(_terminal_sock)
     # Reuse the same Sock instance for the Hermes chat WebSocket bridge.
