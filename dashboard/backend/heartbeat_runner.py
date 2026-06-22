@@ -80,13 +80,15 @@ def _upsert_heartbeat_from_yaml(heartbeat_id: str) -> dict | None:
             """INSERT OR REPLACE INTO heartbeats
                (id, agent, interval_seconds, max_turns, timeout_seconds,
                 lock_timeout_seconds, wake_triggers, enabled, goal_id,
-                required_secrets, decision_prompt, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                required_secrets, decision_prompt, source_plugin, handler,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 hb.id, hb.agent, hb.interval_seconds, hb.max_turns,
                 hb.timeout_seconds, hb.lock_timeout_seconds,
                 json.dumps(hb.wake_triggers), int(hb.enabled), hb.goal_id,
                 json.dumps(hb.required_secrets), hb.decision_prompt,
+                hb.source_plugin, hb.handler,
                 now, now,
             ),
         )
@@ -490,7 +492,9 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
         try:
             # Special case: agent='system' heartbeats run a Python script directly
             # instead of invoking Claude. The script path is resolved by heartbeat id.
-            if hb["agent"] == "system":
+            # Handler heartbeats use in-process dispatch (step 7) even when agent='system',
+            # so skip this short-circuit when a handler is set.
+            if not (hb.get("handler") or "").strip() and hb["agent"] == "system":
                 full_prompt = f"[system heartbeat] {heartbeat_id}"
                 result = _run_system_heartbeat(heartbeat_id, hb["timeout_seconds"])
                 result["agent"] = "system"

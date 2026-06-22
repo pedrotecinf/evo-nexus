@@ -190,14 +190,15 @@ def _sync_heartbeats_to_db():
                        (id, agent, interval_seconds, max_turns, timeout_seconds,
                         lock_timeout_seconds, wake_triggers, enabled, goal_id,
                         required_secrets, decision_prompt, source_plugin,
-                        created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        handler, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         hb.id, hb.agent, hb.interval_seconds, hb.max_turns,
                         hb.timeout_seconds, hb.lock_timeout_seconds,
                         json.dumps(hb.wake_triggers), int(hb.enabled), hb.goal_id,
                         json.dumps(hb.required_secrets), hb.decision_prompt,
                         hb.source_plugin,
+                        hb.handler,
                         now, now,
                     ),
                 )
@@ -208,13 +209,13 @@ def _sync_heartbeats_to_db():
                        agent=?, interval_seconds=?, max_turns=?, timeout_seconds=?,
                        lock_timeout_seconds=?, wake_triggers=?, goal_id=?,
                        required_secrets=?, decision_prompt=?, source_plugin=?,
-                       updated_at=?
+                       handler=?, updated_at=?
                        WHERE id=?""",
                     (
                         hb.agent, hb.interval_seconds, hb.max_turns, hb.timeout_seconds,
                         hb.lock_timeout_seconds, json.dumps(hb.wake_triggers), hb.goal_id,
                         json.dumps(hb.required_secrets), hb.decision_prompt,
-                        hb.source_plugin, now,
+                        hb.source_plugin, hb.handler, now,
                         hb.id,
                     ),
                 )

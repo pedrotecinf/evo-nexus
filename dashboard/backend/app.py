@@ -132,6 +132,8 @@ with app.app_context():
                 goal_id TEXT,
                 required_secrets TEXT DEFAULT '[]',
                 decision_prompt TEXT NOT NULL,
+                source_plugin TEXT,
+                handler TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -518,6 +520,10 @@ with app.app_context():
     _hb_cols = {row[1] for row in _cur.execute("PRAGMA table_info(heartbeats)").fetchall()}
     if "source_plugin" not in _hb_cols:
         _cur.execute("ALTER TABLE heartbeats ADD COLUMN source_plugin TEXT")
+        _conn.commit()
+    # Wave 2.2r: in-process handler heartbeats (module.function, no Claude turns)
+    if "handler" not in _hb_cols:
+        _cur.execute("ALTER TABLE heartbeats ADD COLUMN handler TEXT")
         _conn.commit()
     # --- End Plugins Wave 1.1 migration ---
 
