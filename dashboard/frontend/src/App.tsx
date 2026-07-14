@@ -100,6 +100,7 @@ function DashboardRouteFrame({
 // Lazy-loaded onboarding + settings pages
 const OnboardingRouter = lazy(() => import('./pages/onboarding/OnboardingRouter'))
 const BrainRepo = lazy(() => import('./pages/settings/BrainRepo'))
+const TailscaleCard = lazy(() => import('./pages/settings/TailscaleCard'))
 
 // Extended user type with onboarding fields (backend may include these)
 interface OnboardingUser {
@@ -244,6 +245,11 @@ function AppContent() {
               <Route path="/settings/brain-repo" element={
                 <Suspense fallback={<div className="flex items-center justify-center py-16"><div className="text-[#5a6b7f] text-sm">Loading...</div></div>}>
                   <BrainRepo />
+                </Suspense>
+              } />
+              <Route path="/settings/tailscale" element={
+                <Suspense fallback={<div className="flex items-center justify-center py-16"><div className="text-[#5a6b7f] text-sm">Loading...</div></div>}>
+                  <TailscaleCard />
                 </Suspense>
               } />
 

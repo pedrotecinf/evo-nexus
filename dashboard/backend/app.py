@@ -836,6 +836,7 @@ from routes.scheduler import bp as scheduler_bp
 from routes.services import bp as services_bp
 from routes.auth_routes import bp as auth_bp
 from routes.systems import bp as systems_bp
+from routes.tailscale import bp as tailscale_bp
 from routes.docs import bp as docs_bp
 from routes.mempalace import bp as mempalace_bp
 from routes.tasks import bp as tasks_bp
@@ -891,6 +892,7 @@ app.register_blueprint(scheduler_bp)
 app.register_blueprint(services_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(systems_bp)
+app.register_blueprint(tailscale_bp)
 app.register_blueprint(docs_bp)
 app.register_blueprint(mempalace_bp)
 app.register_blueprint(tasks_bp)

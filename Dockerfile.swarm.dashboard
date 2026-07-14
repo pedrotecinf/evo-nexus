@@ -53,6 +53,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
+# Tailscale CLI (for VPN integration)
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
 # All CLIs — the Providers page in the UI switches between them at runtime.
 # @gitlawb/openclaude@latest is pinned to the npm dist-tag which as of the
 # current fix is ≥0.3.0 (first version with the Codex shortcut endpoint).
