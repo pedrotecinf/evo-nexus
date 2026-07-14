@@ -148,6 +148,19 @@ else
     echo "[start-dashboard] hermes not found, skipping Hermes dashboard"
 fi
 
+# Start tailscaled if installed (for Tailscale VPN integration)
+# Required NET_ADMIN cap and /var/lib/tailscale volume — see docker-compose.yml.
+TAILSCALED_PID=""
+if command -v tailscaled &>/dev/null; then
+    mkdir -p /var/run/tailscale
+    echo "[start-dashboard] starting tailscaled for VPN integration"
+    tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock &>/var/log/tailscaled.log &
+    TAILSCALED_PID=$!
+    sleep 1
+else
+    echo "[start-dashboard] tailscaled not found, skipping VPN integration"
+fi
+
 # Start Flask in the background
 uv run python /workspace/dashboard/backend/app.py &
 FLASK_PID=$!
@@ -155,12 +168,14 @@ FLASK_PID=$!
 # When this script exits for any reason, kill both children
 # shellcheck disable=SC2317  # invoked by trap below
 cleanup() {
-    echo "[start-dashboard] shutting down (terminal=${TERMINAL_PID}, flask=${FLASK_PID}, hermes=${HERMES_PID:-none})"
+    echo "[start-dashboard] shutting down (terminal=${TERMINAL_PID}, flask=${FLASK_PID}, hermes=${HERMES_PID:-none}, tailscaled=${TAILSCALED_PID:-none})"
     kill "${TERMINAL_PID}" "${FLASK_PID}" 2>/dev/null || true
     [ -n "${HERMES_PID}" ] && kill "${HERMES_PID}" 2>/dev/null || true
+    [ -n "${TAILSCALED_PID}" ] && kill "${TAILSCALED_PID}" 2>/dev/null || true
     wait "${TERMINAL_PID}" 2>/dev/null || true
     wait "${FLASK_PID}" 2>/dev/null || true
     [ -n "${HERMES_PID}" ] && wait "${HERMES_PID}" 2>/dev/null || true
+    [ -n "${TAILSCALED_PID}" ] && wait "${TAILSCALED_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
