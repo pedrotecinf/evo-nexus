@@ -80,12 +80,15 @@ def tailscale_connect():
     if current.get("connected"):
         return jsonify({"connected": True, "ip": current.get("ip"), "already": True})
 
-    # Attempt connection
+    # Attempt connection.
+    # Daemon runs with --tun=userspace-networking (no NET_ADMIN available under
+    # Dokploy), so --accept-routes is omitted: in userspace mode the node cannot
+    # install kernel routes / act as a subnet router. --accept-dns keeps MagicDNS.
     result = _tailscale(
         "up",
         "--authkey=" + auth_key,
         "--accept-dns",
-        "--accept-routes",
+        "--hostname=hermes",
         "--reset",
     )
 

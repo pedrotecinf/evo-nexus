@@ -148,13 +148,18 @@ else
     echo "[start-dashboard] hermes not found, skipping Hermes dashboard"
 fi
 
-# Start tailscaled if installed (for Tailscale VPN integration)
-# Required NET_ADMIN cap and /var/lib/tailscale volume — see docker-compose.yml.
+# Start tailscaled if installed (for Tailscale VPN integration).
+# Uses --tun=userspace-networking so the daemon needs NO NET_ADMIN cap and
+# NO /dev/net/tun device — required because Dokploy/Docker Swarm does not
+# pass through container capabilities/devices from docker-compose.yml, and the
+# Dokploy UI has no fields for CapAdd/Devices on this service.
+# Trade-off: the node appears in the tailnet and is reachable via MagicDNS
+# (inbound TCP works), but it CANNOT act as a subnet router / exit node.
 TAILSCALED_PID=""
 if command -v tailscaled &>/dev/null; then
     mkdir -p /var/run/tailscale
-    echo "[start-dashboard] starting tailscaled for VPN integration"
-    tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock &>/var/log/tailscaled.log &
+    echo "[start-dashboard] starting tailscaled (userspace-networking, no NET_ADMIN needed)"
+    tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock --tun=userspace-networking &>/var/log/tailscaled.log &
     TAILSCALED_PID=$!
     sleep 1
 else
