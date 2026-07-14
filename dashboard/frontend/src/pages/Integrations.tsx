@@ -39,7 +39,7 @@ import {
 import { api } from '../lib/api'
 import IntegrationDrawer from '../components/IntegrationDrawer'
 import { getIntegrationMeta } from '../lib/integrationMeta'
-import { useTranslation } from 'react-i18next'import { lazy } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const TailscaleCard = lazy(() => import('./settings/TailscaleCard'))
 
