@@ -30,6 +30,7 @@ register_websocket_proxy() and is mounted on the same Sock instance.
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import threading
@@ -146,11 +147,18 @@ def proxy_http(subpath: str = ""):
     if request.query_string:
         target = f"{target}?{request.query_string.decode('latin-1')}"
 
+    hermes_pass = os.environ.get("EVONEXUS_HERMES_PASSWORD", "")
+    hermes_user = os.environ.get("EVONEXUS_HERMES_USERNAME", "hermes-admin")
+    headers = _forward_headers(dict(request.headers))
+    if hermes_pass:
+        creds = base64.b64encode(f"{hermes_user}:{hermes_pass}".encode()).decode()
+        headers["Authorization"] = f"Basic {creds}"
+
     try:
         upstream = requests.request(
             method=request.method,
             url=target,
-            headers=_forward_headers(dict(request.headers)),
+            headers=headers,
             data=request.get_data(),
             allow_redirects=False,
             stream=True,
@@ -260,8 +268,12 @@ def register_websocket_proxy(sock) -> None:
             return
 
         target = f"{HERMES_WS_BASE}/{upstream_path}"
+        qs_parts = []
         if request.query_string:
-            target = f"{target}?{request.query_string.decode('latin-1')}"
+            qs_parts.append(request.query_string.decode("latin-1"))
+        # ?internal= bypasses auth for child processes (Hermes v0.18.2+)
+        qs_parts.append("internal=")
+        target = f"{target}?{'&'.join(qs_parts)}"
 
         try:
             upstream = create_connection(target, timeout=10)

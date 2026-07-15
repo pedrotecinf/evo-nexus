@@ -131,18 +131,42 @@ HERMES_PID=""
 # EvoNexus-prefixed env vars → Hermes native env vars.
 # Use EVONEXUS_HERMES_* in docker-compose to avoid clashing with
 # standalone Hermes installations.
-HERMES_API_PORT="${EVONEXUS_HERMES_API_PORT:-8642}"
+# Hermes dashboard auth for remote access.
+# When EVONEXUS_HERMES_USERNAME/PASSWORD are set, Hermes binds 0.0.0.0
+# (enabling remote access via Tailscale) and requires Basic Auth.
+# The proxy injects credentials so the iframe remains seamless.
+HERMES_ADMIN_USER="${EVONEXUS_HERMES_USERNAME:-}"
+HERMES_ADMIN_PASS="${EVONEXUS_HERMES_PASSWORD:-}"
+if [ -n "$HERMES_ADMIN_USER" ] && [ -n "$HERMES_ADMIN_PASS" ]; then
+    HERMES_DASHBOARD_HOST="0.0.0.0"
+    # Generate bcrypt hash for config.yaml (Python available in container)
+    _pw_hash=$(python3 -c "
+import bcrypt
+print(bcrypt.hashpw('$HERMES_ADMIN_PASS'.encode(), bcrypt.gensalt()).decode())
+")
+    mkdir -p ~/.config/hermes
+    cat > ~/.config/hermes/config.yaml << EOF
+dashboard:
+  basic_auth:
+    username: "$HERMES_ADMIN_USER"
+    password_hash: "$_pw_hash"
+EOF
+    chmod 600 ~/.config/hermes/config.yaml
+else
+    HERMES_DASHBOARD_HOST="127.0.0.1"
+fi
+
 if command -v hermes &>/dev/null; then
     export HERMES_DASHBOARD=1
-    export HERMES_DASHBOARD_HOST=127.0.0.1
+    export HERMES_DASHBOARD_HOST="${HERMES_DASHBOARD_HOST}"
     export HERMES_DASHBOARD_PORT="${HERMES_UI_PORT}"
     export API_SERVER_ENABLED="${EVONEXUS_HERMES_API_ENABLED:-true}"
     export API_SERVER_HOST=127.0.0.1
     export API_SERVER_PORT="${HERMES_API_PORT}"
     [ -n "${EVONEXUS_HERMES_API_KEY:-}" ] && export API_SERVER_KEY="${EVONEXUS_HERMES_API_KEY}"
 
-    echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT} (API on :${HERMES_API_PORT})"
-    (hermes dashboard --port "${HERMES_UI_PORT}" --host 127.0.0.1 --no-open || echo "[start-dashboard] hermes dashboard exited with code $?") &
+    echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT} (host=${HERMES_DASHBOARD_HOST})"
+    (hermes dashboard --port "${HERMES_UI_PORT}" --host "${HERMES_DASHBOARD_HOST}" --no-open || echo "[start-dashboard] hermes dashboard exited with code $?") &
     HERMES_PID=$!
 else
     echo "[start-dashboard] hermes not found, skipping Hermes dashboard"
