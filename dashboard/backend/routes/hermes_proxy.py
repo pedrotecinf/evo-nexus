@@ -135,6 +135,60 @@ def _forward_headers(src: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in src.items() if k.lower() not in _HOP_BY_HOP}
 
 
+# ---------------------------------------------------------------------------
+# Hermes gated-auth session manager.
+#
+# When Hermes binds 0.0.0.0 with basic_auth enabled, it runs in "gated" mode:
+# cookie-based session auth instead of the loopback session-token scheme.
+# The proxy must POST credentials to /auth/password-login, cache the resulting
+# session cookies, and replay them on every upstream request. When the session
+# expires (upstream returns 302/401), the next request triggers a re-login.
+# ---------------------------------------------------------------------------
+_hermes_session_lock = threading.Lock()
+_hermes_session_cookies: dict[str, str] = {}
+
+
+def _hermes_auth_enabled() -> bool:
+    return bool(os.environ.get("EVONEXUS_HERMES_PASSWORD", ""))
+
+
+def _hermes_login() -> dict[str, str]:
+    """POST credentials to Hermes /auth/password-login, return cookie jar."""
+    user = os.environ.get("EVONEXUS_HERMES_USERNAME", "hermes-admin")
+    pw = os.environ.get("EVONEXUS_HERMES_PASSWORD", "")
+    try:
+        resp = requests.post(
+            f"{HERMES_UI_BASE}/auth/password-login",
+            json={"provider": "basic", "username": user, "password": pw},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.cookies.get_dict()
+        log.warning(
+            "hermes_proxy: login failed (%s): %s",
+            resp.status_code,
+            resp.text[:200],
+        )
+    except Exception as exc:
+        log.warning("hermes_proxy: login error: %s", exc)
+    return {}
+
+
+def _hermes_get_cookies() -> dict[str, str]:
+    """Return cached session cookies, re-logging in if empty."""
+    global _hermes_session_cookies
+    with _hermes_session_lock:
+        if not _hermes_session_cookies:
+            _hermes_session_cookies = _hermes_login()
+        return _hermes_session_cookies
+
+
+def _hermes_invalidate_session() -> None:
+    global _hermes_session_cookies
+    with _hermes_session_lock:
+        _hermes_session_cookies = {}
+
+
 @bp.route(
     "/hermes-ui/<path:subpath>",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -151,19 +205,47 @@ def proxy_http(subpath: str = ""):
     hermes_user = os.environ.get("EVONEXUS_HERMES_USERNAME", "hermes-admin")
     headers = _forward_headers(dict(request.headers))
     if hermes_pass:
-        creds = base64.b64encode(f"{hermes_user}:{hermes_pass}".encode()).decode()
-        headers["Authorization"] = f"Basic {creds}"
+        # Hermes gated auth uses cookie-based sessions, not Basic Auth.
+        # Inject the cached session cookies instead of an Authorization header.
+        cookies = _hermes_get_cookies()
+        if cookies:
+            # Strip incoming Cookie header and use our managed session cookies
+            headers.pop("cookie", None)
+            headers.pop("Cookie", None)
+        else:
+            # Fallback to Basic Auth if login failed (loopback / no-gate mode)
+            creds = base64.b64encode(f"{hermes_user}:{hermes_pass}".encode()).decode()
+            headers["Authorization"] = f"Basic {creds}"
+            cookies = None
+    else:
+        cookies = None
 
     try:
         upstream = requests.request(
             method=request.method,
             url=target,
             headers=headers,
+            cookies=cookies,
             data=request.get_data(),
             allow_redirects=False,
             stream=True,
             timeout=30,
         )
+        # Session expired — re-login and retry once.
+        if hermes_pass and upstream.status_code in (302, 401) and subpath != "auth/password-login":
+            _hermes_invalidate_session()
+            new_cookies = _hermes_get_cookies()
+            if new_cookies:
+                upstream = requests.request(
+                    method=request.method,
+                    url=target,
+                    headers=headers,
+                    cookies=new_cookies,
+                    data=request.get_data(),
+                    allow_redirects=False,
+                    stream=True,
+                    timeout=30,
+                )
     except requests.exceptions.ConnectionError:
         return (
             "Hermes UI is not running. Ensure Hermes Agent is installed "
@@ -275,8 +357,16 @@ def register_websocket_proxy(sock) -> None:
         qs_parts.append("internal=")
         target = f"{target}?{'&'.join(qs_parts)}"
 
+        # When Hermes is in gated auth mode, pass session cookies.
+        ws_headers = {}
+        if _hermes_auth_enabled():
+            cookies = _hermes_get_cookies()
+            if cookies:
+                cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
+                ws_headers["Cookie"] = cookie_str
+
         try:
-            upstream = create_connection(target, timeout=10)
+            upstream = create_connection(target, timeout=10, header=ws_headers)
         except Exception as exc:
             log.warning("hermes_proxy: upstream WS connect failed: %s", exc)
             try:

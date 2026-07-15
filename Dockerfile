@@ -30,6 +30,9 @@ RUN npm install -g todoist-ts-cli
 RUN curl -fsSL https://composio.dev/install | bash
 ENV PATH="/root/.composio:$PATH"
 
+# Install Tailscale CLI (for VPN integration)
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
 WORKDIR /workspace
 
 # Copy project files
@@ -55,6 +58,7 @@ VOLUME ["/workspace/workspace/daily-logs", \
         "/workspace/workspace/strategy", \
         "/workspace/memory", \
         "/workspace/ADWs/logs", \
-        "/workspace/.claude/agent-memory"]
+        "/workspace/.claude/agent-memory", \
+        "/var/lib/tailscale"]
 
 ENTRYPOINT ["uv", "run", "python"]

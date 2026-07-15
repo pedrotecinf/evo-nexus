@@ -8,25 +8,14 @@ HERMES_ADMIN_PASS="${EVONEXUS_HERMES_PASSWORD:-}"
 if [ -n "$HERMES_ADMIN_USER" ] && [ -n "$HERMES_ADMIN_PASS" ]; then
     echo "[gateway] Configuring Hermes Basic Auth..."
 
-    # Generate bcrypt hash using uv venv
-    _pw_hash=$(uv run python -c "
-import bcrypt
-print(bcrypt.hashpw('$HERMES_ADMIN_PASS'.encode(), bcrypt.gensalt()).decode())
-")
-
-    # Write config.yaml with auth credentials
-    mkdir -p ~/.config/hermes
-    cat > ~/.config/hermes/config.yaml << EOF
-dashboard:
-  basic_auth:
-    username: "$HERMES_ADMIN_USER"
-    password_hash: "$_pw_hash"
-EOF
-    chmod 600 ~/.config/hermes/config.yaml
-    echo "[gateway] Basic Auth configured for user: $HERMES_ADMIN_USER"
+    # Hermes basic_auth plugin reads env vars natively:
+    #   HERMES_DASHBOARD_BASIC_AUTH_USERNAME / _PASSWORD
+    export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="$HERMES_ADMIN_USER"
+    export HERMES_DASHBOARD_BASIC_AUTH_PASSWORD="$HERMES_ADMIN_PASS"
 
     # Bind to 0.0.0.0 when auth is enabled
     export HERMES_DASHBOARD_HOST="0.0.0.0"
+    echo "[gateway] Basic Auth configured for user: $HERMES_ADMIN_USER"
 else
     echo "[gateway] No auth credentials provided, running without auth"
     export HERMES_DASHBOARD_HOST="127.0.0.1"

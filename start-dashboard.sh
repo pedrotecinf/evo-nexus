@@ -139,30 +139,14 @@ HERMES_ADMIN_USER="${EVONEXUS_HERMES_USERNAME:-}"
 HERMES_ADMIN_PASS="${EVONEXUS_HERMES_PASSWORD:-}"
 if [ -n "$HERMES_ADMIN_USER" ] && [ -n "$HERMES_ADMIN_PASS" ]; then
     HERMES_DASHBOARD_HOST="0.0.0.0"
-    # Generate bcrypt hash for config.yaml. bcrypt is a project dep
-    # (pyproject.toml) installed in the uv venv; the bare system python3
-    # does NOT have it, so run via `uv run python`.
-    if command -v uv &>/dev/null; then
-        _pw_hash=$(uv run python -c "
-import bcrypt
-print(bcrypt.hashpw(\"$HERMES_ADMIN_PASS\".encode(), bcrypt.gensalt()).decode())
-" 2>/dev/null || echo "")
-    fi
-    if [ -z "${_pw_hash:-}" ]; then
-        echo "[start-dashboard] WARNING: bcrypt unavailable — falling back to 127.0.0.1 (no remote auth). Install bcrypt or pre-hash the password."
-        HERMES_ADMIN_USER=""
-        HERMES_ADMIN_PASS=""
-        HERMES_DASHBOARD_HOST="127.0.0.1"
-    else
-        mkdir -p ~/.config/hermes
-        cat > ~/.config/hermes/config.yaml << EOF
-dashboard:
-  basic_auth:
-    username: "$HERMES_ADMIN_USER"
-    password_hash: "$_pw_hash"
-EOF
-        chmod 600 ~/.config/hermes/config.yaml
-    fi
+    # Hermes basic_auth plugin reads dashboard.basic_auth from
+    # ~/.hermes/config.yaml (NOT ~/.config/hermes/) and expects scrypt
+    # hashes (NOT bcrypt). It also accepts env vars as fallback:
+    #   HERMES_DASHBOARD_BASIC_AUTH_USERNAME
+    #   HERMES_DASHBOARD_BASIC_AUTH_PASSWORD (plaintext — plugin hashes internally)
+    # We use env vars to avoid path/hash-format fragility.
+    export HERMES_DASHBOARD_BASIC_AUTH_USERNAME="$HERMES_ADMIN_USER"
+    export HERMES_DASHBOARD_BASIC_AUTH_PASSWORD="$HERMES_ADMIN_PASS"
 else
     HERMES_DASHBOARD_HOST="127.0.0.1"
 fi
