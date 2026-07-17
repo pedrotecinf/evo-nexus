@@ -45,6 +45,7 @@ ADWs/routines/custom/
 
 # ── Provider config (user-specific, has API keys) ─
 config/providers.json
+config/hermes_profiles.json
 
 # ── Runtime data & logs ───────────────────
 backups/
