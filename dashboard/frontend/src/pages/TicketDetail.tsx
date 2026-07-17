@@ -132,6 +132,14 @@ export default function TicketDetail() {
   )
   // Mobile drawer state
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  // Hermes profile that would run work on this ticket (read-only baseline preview)
+  const [hermesProfile, setHermesProfile] = useState<{ profile: string; reason: string } | null>(null)
+
+  useEffect(() => {
+    api.get('/hermes/profiles/resolve')
+      .then((data) => setHermesProfile({ profile: data.profile, reason: data.reason }))
+      .catch(() => setHermesProfile(null))
+  }, [])
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed(prev => {
@@ -647,6 +655,14 @@ export default function TicketDetail() {
             <p className="text-[#667085] mb-1.5">Assignee</p>
             <span className="text-[#e6edf3] font-mono">{ticket.assignee_agent ? `@${ticket.assignee_agent}` : '—'}</span>
           </div>
+
+          {hermesProfile && (
+            <div>
+              <p className="text-[#667085] mb-1.5">Perfil Hermes</p>
+              <span className="text-[#00FFA7] font-mono">{hermesProfile.profile}</span>
+              <span className="text-[#667085]"> ({hermesProfile.reason})</span>
+            </div>
+          )}
 
           <div>
             <p className="text-[#667085] mb-1.5">Lock</p>

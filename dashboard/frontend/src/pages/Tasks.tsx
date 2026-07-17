@@ -12,6 +12,7 @@ interface Task {
   type: string
   payload: string
   agent: string | null
+  hermes_profile: string | null
   scheduled_at: string
   status: string
   created_at: string
@@ -60,7 +61,13 @@ function formatDate(iso: string | null): string {
   return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-const emptyForm = { name: '', description: '', type: 'skill', payload: '', agent: '', scheduled_at: '' }
+const emptyForm = { name: '', description: '', type: 'skill', payload: '', agent: '', hermes_profile: '', scheduled_at: '' }
+
+interface HermesProfile {
+  slug: string
+  provider: string | null
+  model: string | null
+}
 
 export default function Tasks() {
   const { t } = useTranslation()
@@ -75,6 +82,25 @@ export default function Tasks() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [viewTask, setViewTask] = useState<Task | null>(null)
+  const [profiles, setProfiles] = useState<HermesProfile[]>([])
+  const [resolvedProfile, setResolvedProfile] = useState<{ profile: string; reason: string } | null>(null)
+
+  useEffect(() => {
+    api.get('/hermes/profiles')
+      .then((data) => setProfiles(data.profiles || []))
+      .catch(() => setProfiles([]))
+  }, [])
+
+  // Live preview of the Hermes profile that will run this task.
+  useEffect(() => {
+    if (!showModal) return
+    const params = new URLSearchParams()
+    if (form.type) params.set('task_type', form.type)
+    if (form.hermes_profile) params.set('override', form.hermes_profile)
+    api.get(`/hermes/profiles/resolve?${params.toString()}`)
+      .then((data) => setResolvedProfile({ profile: data.profile, reason: data.reason }))
+      .catch(() => setResolvedProfile(null))
+  }, [showModal, form.type, form.hermes_profile])
 
   const fetchTasks = () => {
     const params = filter ? `?status=${filter}` : ''
@@ -103,6 +129,7 @@ export default function Tasks() {
       type: task.type,
       payload: task.payload,
       agent: task.agent || '',
+      hermes_profile: task.hermes_profile || '',
       scheduled_at: task.scheduled_at ? task.scheduled_at.slice(0, 16) : '',
     })
     setShowModal(true)
@@ -115,6 +142,7 @@ export default function Tasks() {
         ...form,
         scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : '',
         agent: form.agent || null,
+        hermes_profile: form.hermes_profile || null,
         description: form.description || null,
       }
       if (editingTask) {
@@ -401,6 +429,31 @@ export default function Tasks() {
                   </select>
                 </div>
               </div>
+
+              {profiles.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-[#667085] mb-1.5">Perfil Hermes (override)</label>
+                  <select
+                    value={form.hermes_profile}
+                    onChange={(e) => setForm({ ...form, hermes_profile: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#0d1117] border border-[#21262d] rounded-lg text-sm text-[#e6edf3] focus:border-[#00FFA7]/50 focus:outline-none"
+                  >
+                    <option value="">Automático (por tipo de tarefa)</option>
+                    {profiles.map((p) => (
+                      <option key={p.slug} value={p.slug}>
+                        {p.slug}{p.provider ? ` — ${p.provider}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {resolvedProfile && (
+                    <p className="mt-1.5 text-xs text-[#667085]">
+                      Vai rodar como{' '}
+                      <span className="text-[#00FFA7] font-medium">{resolvedProfile.profile}</span>
+                      <span className="text-[#667085]"> ({resolvedProfile.reason})</span>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-[#667085] mb-1.5">
