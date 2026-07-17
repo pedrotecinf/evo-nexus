@@ -24,6 +24,7 @@ Output format matches Claude Code JSON:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,15 +38,28 @@ def main():
     parser.add_argument("--output-format", default="text", help="Output format (json/text)")
     parser.add_argument("--max-turns", type=int, help="Max conversation turns")
     parser.add_argument("--agent", help="Agent/skills to load")
+    parser.add_argument("--profile", help="Hermes profile slug (privilege routing)")
     parser.add_argument("--dangerously-skip-permissions", action="store_true",
                         help="Skip permission prompts (compat flag, no-op for Hermes)")
     parser.add_argument("prompt", help="Prompt to execute")
 
     args = parser.parse_args()
 
-    # Build Hermes command. --skills is a Hermes global flag, so keep it
-    # before the chat subcommand.
+    # Build Hermes command. --skills and -p/--profile are Hermes global flags,
+    # so keep them before the chat subcommand.
     hermes_cmd = ["hermes"]
+
+    # Select the Hermes profile per-invocation (does not touch
+    # ~/.hermes/active_profile). Validate the slug to avoid arg injection.
+    if args.profile:
+        if not re.match(r"^[a-z0-9][a-z0-9-]*$", args.profile):
+            print(json.dumps({
+                "result": "",
+                "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+                "error": f"Invalid Hermes profile slug: {args.profile!r}",
+            }, ensure_ascii=False))
+            sys.exit(1)
+        hermes_cmd.extend(["-p", args.profile])
 
     # Map flags to Hermes equivalents
     if args.max_turns:

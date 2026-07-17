@@ -127,11 +127,15 @@ def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=N
 _ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude", "hermes"})
 
 
-def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: dict) -> subprocess.Popen:
+def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: dict,
+               profile: str | None = None) -> subprocess.Popen:
     """Spawn a CLI process using only hardcoded command strings.
 
     Uses a dictionary lookup so that the subprocess argument is always
     a static string, satisfying semgrep/opengrep subprocess injection rules.
+
+    ``profile`` (Hermes only) selects the Hermes profile per-invocation via the
+    adapter's ``--profile`` flag; ignored by the claude/openclaude branches.
     """
     base_args = ["--print", "--dangerously-skip-permissions", "--output-format", "json"]
     if agent:
@@ -158,6 +162,8 @@ def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: d
         ]
         if agent:
             hermes_args.extend(["--agent", agent])
+        if profile:
+            hermes_args.extend(["--profile", profile])
         hermes_args.append(prompt)
         return subprocess.Popen([sys.executable, str(adapter_path)] + hermes_args, **popen_kwargs)  # noqa: S603
     elif cli_command == "openclaude":
@@ -210,7 +216,8 @@ def _get_provider_config() -> tuple[str, dict]:
         return "claude", {}
 
 
-def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent: str = None) -> dict:
+def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent: str = None,
+               profile: str = None) -> dict:
     """
     Execute AI CLI (claude, openclaude, or hermes) with streaming output.
 
@@ -222,6 +229,9 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
         log_name: Name for logs
         timeout: Timeout in seconds
         agent: Agent name (.claude/agents/*.md) — if None, runs without agent
+        profile: Hermes profile slug (privilege routing). Only used when the
+            active provider is Hermes; ignored otherwise. If None, Hermes runs
+            under its global active profile (backward-compatible).
     """
     cli_command, provider_env = _get_provider_config()
 
@@ -235,7 +245,7 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
     start_time = datetime.now()
 
     try:
-        process = _spawn_cli(cli_command, prompt, agent, provider_env)
+        process = _spawn_cli(cli_command, prompt, agent, provider_env, profile)
 
         stdout_lines = []
         line_count = 0
@@ -313,6 +323,7 @@ def run_skill(
     timeout: int = 600,
     agent: str = None,
     notify_telegram: bool | str = False,
+    profile: str = None,
 ) -> dict:
     """Execute a skill via CLI, optionally with an agent.
 
@@ -346,7 +357,7 @@ def run_skill(
             f"---"
         )
 
-    result = run_claude(prompt, log_name or skill_name, timeout, agent=agent)
+    result = run_claude(prompt, log_name or skill_name, timeout, agent=agent, profile=profile)
 
     if chat_id and result.get("returncode", -1) == 0:
         stdout = result.get("stdout", "")
