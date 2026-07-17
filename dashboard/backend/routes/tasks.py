@@ -79,6 +79,7 @@ def create_task():
         type=data["type"],
         payload=data["payload"],
         agent=data.get("agent"),
+        hermes_profile=data.get("hermes_profile") or None,
         scheduled_at=scheduled_at,
         status="pending",
         created_by=current_user.id if current_user.is_authenticated else None,
@@ -104,7 +105,7 @@ def update_task(task_id):
     if not data:
         return jsonify({"error": "JSON body required"}), 400
 
-    for field in ("name", "description", "type", "payload", "agent"):
+    for field in ("name", "description", "type", "payload", "agent", "hermes_profile"):
         if field in data:
             setattr(task, field, data[field])
 
@@ -193,12 +194,21 @@ def _execute_task(task_id: int):
 
             from runner import run_skill, run_claude
 
+            # Resolve the Hermes profile (privilege routing). Only affects runs
+            # under the Hermes provider; None is harmless for claude/openclaude.
+            try:
+                from hermes_profiles import resolve_profile
+                hermes_profile, _profile_reason = resolve_profile(task.type, task.hermes_profile)
+            except Exception:
+                hermes_profile = None  # fail-open: never block a task on routing
+
             if task.type == "skill":
                 result = run_skill(
                     task.payload,
                     log_name=f"task-{task.id}",
                     timeout=600,
                     agent=task.agent or None,
+                    profile=hermes_profile,
                 )
             else:
                 result = run_claude(
@@ -206,6 +216,7 @@ def _execute_task(task_id: int):
                     log_name=f"task-{task.id}",
                     timeout=600,
                     agent=task.agent or None,
+                    profile=hermes_profile,
                 )
 
             task.status = "completed" if result.get("success") else "failed"

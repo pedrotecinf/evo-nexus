@@ -233,6 +233,7 @@ class ScheduledTask(db.Model):
     type = db.Column(db.String(20), nullable=False)  # skill, prompt, script
     payload = db.Column(db.Text, nullable=False)
     agent = db.Column(db.String(50), nullable=True)
+    hermes_profile = db.Column(db.String(64), nullable=True)  # optional Hermes profile override
     scheduled_at = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending, running, completed, failed, cancelled
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -250,6 +251,7 @@ class ScheduledTask(db.Model):
             "type": self.type,
             "payload": self.payload,
             "agent": self.agent,
+            "hermes_profile": self.hermes_profile,
             "scheduled_at": self.scheduled_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.scheduled_at else None,
             "status": self.status,
             "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.created_at else None,

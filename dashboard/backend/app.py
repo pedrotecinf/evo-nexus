@@ -354,6 +354,15 @@ with app.app_context():
 
     # --- End tickets migration ---
 
+    # --- Hermes profile override on scheduled_tasks (hermes-profile-routing feature) ---
+    _st_tables = {row[0] for row in _cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "scheduled_tasks" in _st_tables:
+        _st_cols = {row[1] for row in _cur.execute("PRAGMA table_info(scheduled_tasks)").fetchall()}
+        if "hermes_profile" not in _st_cols:
+            _cur.execute("ALTER TABLE scheduled_tasks ADD COLUMN hermes_profile TEXT")
+            _conn.commit()
+    # --- End Hermes profile migration ---
+
     # --- Knowledge connections migration (pgvector-knowledge feature) ---
     _existing_tables3 = {row[0] for row in _cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     if "knowledge_connections" not in _existing_tables3:
@@ -844,6 +853,7 @@ from routes.triggers import bp as triggers_bp
 from routes.terminal_proxy import bp as terminal_proxy_bp, register_websocket_proxy as _register_terminal_ws
 from routes.backups import bp as backups_bp
 from routes.providers import bp as providers_bp
+from routes.hermes_profiles_routes import bp as hermes_profiles_bp
 from routes.hermes_proxy import bp as hermes_proxy_bp, register_websocket_proxy as _register_hermes_ws
 from routes.settings import bp as settings_bp
 from routes.shares import bp as shares_bp
@@ -930,6 +940,7 @@ except Exception as _exc:
     )
 app.register_blueprint(backups_bp)
 app.register_blueprint(providers_bp)
+app.register_blueprint(hermes_profiles_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(shares_bp)
 app.register_blueprint(heartbeats_bp)
