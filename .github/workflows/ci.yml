@@ -5,6 +5,8 @@ on:
     branches: [develop, main, feature/hermes-runtime]
     paths:
       - "dashboard/**"
+      - "ADWs/**"
+      - "config/**"
       - "tests/**"
       - "pyproject.toml"
       - "uv.lock"
@@ -13,6 +15,8 @@ on:
     branches: [develop, main]
     paths:
       - "dashboard/**"
+      - "ADWs/**"
+      - "config/**"
       - "tests/**"
       - "pyproject.toml"
       - "uv.lock"
@@ -43,7 +47,7 @@ jobs:
         run: uv sync --frozen --dev
 
       - name: Run backend tests
-        run: uv run python -m pytest tests/backend/test_auth_security.py tests/backend/test_health_routes.py
+        run: uv run python -m pytest tests/backend/test_auth_security.py tests/backend/test_health_routes.py tests/backend/test_hermes_profile.py
 
   terminal-server:
     runs-on: ubuntu-latest

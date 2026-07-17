@@ -130,6 +130,39 @@ def test_hermes_cli_syntax():
 
     return True, "Hermes invocations use supported chat syntax"
 
+def test_adapter_supports_profile_flag():
+    """Check the adapter accepts --profile and emits `hermes -p <slug>` (Fase 2)."""
+    adapter_content = (WORKSPACE / "ADWs" / "hermes_adapter.py").read_text()
+
+    if '"--profile"' not in adapter_content:
+        return False, "hermes_adapter.py does not define --profile"
+    if '"-p", args.profile' not in adapter_content:
+        return False, "hermes_adapter.py does not pass -p <profile> to hermes"
+
+    runner_content = (WORKSPACE / "ADWs" / "runner.py").read_text()
+    if '"--profile", profile' not in runner_content:
+        return False, "runner.py does not forward --profile to the adapter"
+
+    return True, "Adapter + runner support Hermes profile routing"
+
+
+def test_profile_registry_resolves():
+    """Check the profile registry resolves task types deterministically (Fase 2)."""
+    import hermes_profiles as hp
+
+    cfg = {
+        "routing": {"research": "researcher", "build": "developer"},
+        "fallback_profile": "default-mac",
+        "profiles_dir": "/nonexistent-so-nothing-installed",
+    }
+    # Nothing installed → everything must fail-safe to a RuntimeError, never escalate.
+    try:
+        hp.resolve_profile("research", None, config=cfg)
+        return False, "resolve_profile should raise when no profile is installed"
+    except RuntimeError:
+        return True, "profile registry fails safe when no profiles installed"
+
+
 def test_plugin_scan_supports_hermes_fallback():
     """Check plugin scan runner falls back through Claude/OpenClaude/Hermes."""
     plugin_scan_path = WORKSPACE / "dashboard" / "backend" / "plugin_scan_runner.py"
@@ -153,6 +186,8 @@ def main():
         ("Runner Imports", test_runner_imports),
         ("Adapter Output Format", test_adapter_output_format),
         ("Hermes CLI Syntax", test_hermes_cli_syntax),
+        ("Adapter Supports Profile Flag", test_adapter_supports_profile_flag),
+        ("Profile Registry Resolves", test_profile_registry_resolves),
         ("Plugin Scan Hermes Fallback", test_plugin_scan_supports_hermes_fallback),
     ]
     
