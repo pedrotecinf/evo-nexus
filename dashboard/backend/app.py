@@ -308,6 +308,96 @@ with app.app_context():
             CREATE INDEX IF NOT EXISTS idx_activity_ticket_created ON ticket_activity(ticket_id, created_at);
         """)
         _conn.commit()
+    # --- Runtime task runs ---
+    _cur.executescript("""
+        CREATE TABLE IF NOT EXISTS runtime_runs (
+            id TEXT PRIMARY KEY,
+            task_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            attempt INTEGER NOT NULL DEFAULT 1,
+            requested_profile TEXT,
+            resolved_profile TEXT,
+            runtime_provider TEXT,
+            workflow_slug TEXT,
+            workflow_hash TEXT,
+            correlation_id TEXT NOT NULL,
+            queued_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            result_summary TEXT,
+            error TEXT,
+            exit_code INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS runtime_run_approvals (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            action_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            decided_by TEXT,
+            decided_at TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS runtime_run_evidence (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            reference TEXT NOT NULL,
+            mime_type TEXT,
+            checksum TEXT,
+            size_bytes INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_runtime_runs_task_status ON runtime_runs(task_id, status);
+    """)
+    _conn.commit()
+    # --- End runtime task runs ---
+
+    # --- Event bus tables ---
+    _cur.executescript("""
+        CREATE TABLE IF NOT EXISTS event_outbox (
+            id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            correlation_id TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS event_inbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            external_event_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(source, external_event_id)
+        );
+    """)
+    _conn.commit()
+    # --- End event bus tables ---
+
+    # --- Hermes Control API tables ---
+    _cur.executescript("""
+        CREATE TABLE IF NOT EXISTS control_api_idempotency (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation TEXT NOT NULL,
+            key TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            response_status INTEGER NOT NULL,
+            response_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(operation, key)
+        );
+        CREATE TABLE IF NOT EXISTS control_api_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation TEXT NOT NULL,
+            resource TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            correlation_id TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+    """)
+    _conn.commit()
+    # --- End Hermes Control API tables ---
+
     # --- Source attribution columns on tickets ---
     _ticket_cols = {row[1] for row in _cur.execute("PRAGMA table_info(tickets)").fetchall()}
     if "source_agent" not in _ticket_cols:
@@ -806,6 +896,10 @@ def auth_middleware():
     if path.startswith("/ws/"):
         return None
 
+    # Control API has its own service-token authentication and scopes.
+    if path.startswith("/api/control/v1/"):
+        return None
+
     # Public API paths (exact match or prefix match for docs/webhooks/shares)
     if (
         path in PUBLIC_PATHS
@@ -854,6 +948,8 @@ from routes.terminal_proxy import bp as terminal_proxy_bp, register_websocket_pr
 from routes.backups import bp as backups_bp
 from routes.providers import bp as providers_bp
 from routes.hermes_profiles_routes import bp as hermes_profiles_bp
+from routes.control_api import bp as control_api_bp
+from routes.runtime_runs import bp as runtime_runs_bp
 from routes.hermes_proxy import bp as hermes_proxy_bp, register_websocket_proxy as _register_hermes_ws
 from routes.settings import bp as settings_bp
 from routes.shares import bp as shares_bp
@@ -941,6 +1037,8 @@ except Exception as _exc:
 app.register_blueprint(backups_bp)
 app.register_blueprint(providers_bp)
 app.register_blueprint(hermes_profiles_bp)
+app.register_blueprint(control_api_bp)
+app.register_blueprint(runtime_runs_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(shares_bp)
 app.register_blueprint(heartbeats_bp)

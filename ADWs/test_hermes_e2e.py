@@ -324,8 +324,7 @@ def test_proxy_iframe_structural(tr: TestResult):
     """Criterion: /hermes-ui, WebSocket, proxy structurally intact."""
     # Check that proxy config files haven't been modified by our tests
     proxy_files = [
-        WORKSPACE / "dashboard" / "backend" / "app.py",
-        WORKSPACE / "dashboard" / "backend" / "proxy_routes.py",
+        WORKSPACE / "dashboard" / "backend" / "routes" / "hermes_proxy.py",
     ]
 
     all_intact = True
@@ -339,7 +338,7 @@ def test_proxy_iframe_structural(tr: TestResult):
 
     # This E2E must not mutate proxy/iframe code. Existing dashboard changes
     # from the feature under test (e.g. task profile authorization) are valid.
-    proxy_paths = {"dashboard/backend/app.py", "dashboard/backend/proxy_routes.py"}
+    proxy_paths = {"dashboard/backend/routes/hermes_proxy.py"}
     git_result = subprocess.run(
         ["git", "diff", "--name-only", "HEAD", "--", *proxy_paths],
         capture_output=True, text=True, cwd=str(WORKSPACE),

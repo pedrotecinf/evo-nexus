@@ -69,6 +69,30 @@ interface HermesProfile {
   model: string | null
 }
 
+interface RuntimeRun {
+  id: string
+  task_id: number
+  status: string
+  attempt: number
+  resolved_profile: string | null
+  runtime_provider: string | null
+  workflow_slug: string | null
+  queued_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  error: string | null
+}
+
+const RUN_STATUS_STYLES: Record<string, string> = {
+  queued: 'text-yellow-400',
+  running: 'text-blue-400',
+  awaiting_approval: 'text-orange-400',
+  cancel_requested: 'text-orange-400',
+  succeeded: 'text-[#00FFA7]',
+  failed: 'text-red-400',
+  cancelled: 'text-[#667085]',
+}
+
 export default function Tasks() {
   const { t } = useTranslation()
   const toast = useToast()
@@ -84,6 +108,7 @@ export default function Tasks() {
   const [viewTask, setViewTask] = useState<Task | null>(null)
   const [profiles, setProfiles] = useState<HermesProfile[]>([])
   const [resolvedProfile, setResolvedProfile] = useState<{ profile: string; reason: string } | null>(null)
+  const [runs, setRuns] = useState<RuntimeRun[]>([])
 
   useEffect(() => {
     api.get('/hermes/profiles')
@@ -113,7 +138,9 @@ export default function Tasks() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchTasks() }, [filter])
+  const fetchRuns = () => api.get('/runtime-runs').then((data) => setRuns(data.runs || [])).catch(() => setRuns([]))
+
+  useEffect(() => { fetchTasks(); fetchRuns() }, [filter])
 
   const openCreate = () => {
     setEditingTask(null)
@@ -526,6 +553,15 @@ export default function Tasks() {
                 <label className="block text-xs font-medium text-[#667085] mb-1">Payload</label>
                 <pre className="text-xs text-[#e6edf3] bg-[#0d1117] border border-[#21262d] rounded-lg p-3 whitespace-pre-wrap font-mono">{viewTask.payload}</pre>
               </div>
+
+              {runs.filter((run) => run.task_id === viewTask.id).map((run) => (
+                <div key={run.id} className="border border-[#21262d] rounded-lg p-3">
+                  <label className="block text-xs font-medium text-[#8b949e] mb-1">Runtime run #{run.attempt}</label>
+                  <p className={`text-sm font-medium ${RUN_STATUS_STYLES[run.status] || 'text-[#e6edf3]'}`}>{run.status}</p>
+                  <p className="text-xs text-[#8b949e] mt-1">{run.resolved_profile || 'default profile'} · {run.runtime_provider || 'active provider'}{run.workflow_slug ? ` · ${run.workflow_slug}` : ''}</p>
+                  {run.error && <pre className="text-xs text-red-300 mt-2 whitespace-pre-wrap">{run.error}</pre>}
+                </div>
+              ))}
 
               {viewTask.result_summary && (
                 <div>

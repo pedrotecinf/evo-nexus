@@ -210,6 +210,10 @@ def _execute_task(task_id: int):
     task.started_at = datetime.now(timezone.utc)
     db.session.commit()
 
+    from runtime_runs import create_run, transition
+    run = create_run(task.id, requested_profile=task.hermes_profile)
+    transition(run, "running")
+
     try:
         workspace = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
@@ -248,8 +252,11 @@ def _execute_task(task_id: int):
 
             task.status = "completed" if result.get("success") else "failed"
             task.result_summary = (result.get("stdout", "") or "")[:5000]
-            if not result.get("success"):
+            if result.get("success"):
+                transition(run, "succeeded", summary=task.result_summary, exit_code=result.get("returncode", 0))
+            else:
                 task.error = (result.get("stderr", "") or "")[:2000]
+                transition(run, "failed", summary=task.result_summary, error=task.error, exit_code=result.get("returncode", -1))
 
         elif task.type == "script":
             # Validate script path is within ADWs/routines/
@@ -267,8 +274,11 @@ def _execute_task(task_id: int):
             )
             task.status = "completed" if proc.returncode == 0 else "failed"
             task.result_summary = (proc.stdout or "")[:5000]
-            if proc.returncode != 0:
+            if proc.returncode == 0:
+                transition(run, "succeeded", summary=task.result_summary, exit_code=proc.returncode)
+            else:
                 task.error = (proc.stderr or "")[:2000]
+                transition(run, "failed", summary=task.result_summary, error=task.error, exit_code=proc.returncode)
 
         else:
             raise ValueError(f"Unknown task type: {task.type}")
@@ -276,9 +286,11 @@ def _execute_task(task_id: int):
     except subprocess.TimeoutExpired:
         task.status = "failed"
         task.error = "Timeout (15 min)"
+        transition(run, "failed", error=task.error, exit_code=-1)
     except Exception as e:
         task.status = "failed"
         task.error = str(e)[:2000]
+        transition(run, "failed", error=task.error, exit_code=-1)
 
     task.completed_at = datetime.now(timezone.utc)
     db.session.commit()

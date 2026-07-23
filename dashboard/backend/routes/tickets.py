@@ -56,6 +56,8 @@ def _log_activity(ticket_id: str, actor: str, action: str, payload: dict | None 
         created_at=_now(),
     )
     db.session.add(act)
+    from event_bus import publish
+    publish(f"ticket.{action}", f"ticket:{ticket_id}", str(uuid.uuid4()), {"actor": actor})
 
 
 def _parse_mentions(body: str) -> list[str]:
