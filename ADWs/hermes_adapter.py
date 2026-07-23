@@ -92,6 +92,8 @@ def main():
         # Preserve stderr for failures so callers can diagnose missing config,
         # missing binary, or provider auth errors without scraping logs.
         output = result.stdout
+        # Hermes chat does not emit machine-readable usage. Keep the legacy
+        # numeric shape for callers, but identify it as unavailable.
         usage = {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -99,13 +101,11 @@ def main():
             "cost_usd": 0.0,
         }
 
-        # Try to parse usage from Hermes output if it's available
-        # Hermes may embed usage info in its output or logs
-
         if args.output_format == "json":
             response = {
                 "result": output,
                 "usage": usage,
+                "usage_source": "unavailable",
             }
             if result.returncode != 0:
                 response["error"] = result.stderr or output or f"Hermes exited with {result.returncode}"
@@ -121,6 +121,7 @@ def main():
         print(json.dumps({
             "result": "",
             "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+            "usage_source": "unavailable",
             "error": "Timeout after 600s"
         }, ensure_ascii=False))
         sys.exit(1)
@@ -128,6 +129,7 @@ def main():
         print(json.dumps({
             "result": "",
             "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+            "usage_source": "unavailable",
             "error": str(e)
         }, ensure_ascii=False))
         sys.exit(1)

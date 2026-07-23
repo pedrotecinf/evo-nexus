@@ -16,6 +16,23 @@ def _require(resource: str, action: str):
     return None
 
 
+def _validate_hermes_profile_override(data: dict):
+    """Allow pinned Hermes profiles only to users who manage tasks."""
+    if "hermes_profile" not in data:
+        return None, None
+
+    profile = data["hermes_profile"] or None
+    if profile is None:
+        return None, None
+    if not has_permission(current_user.role, "tasks", "manage"):
+        return None, (jsonify({"error": "Forbidden"}), 403)
+
+    from hermes_profiles import is_valid_slug
+    if not is_valid_slug(profile):
+        return None, (jsonify({"error": "Invalid Hermes profile"}), 400)
+    return profile, None
+
+
 @bp.route("/api/tasks")
 def list_tasks():
     denied = _require("tasks", "view")
@@ -73,13 +90,17 @@ def create_task():
     except (ValueError, AttributeError):
         return jsonify({"error": "Invalid scheduled_at format (use ISO 8601)"}), 400
 
+    hermes_profile, error = _validate_hermes_profile_override(data)
+    if error:
+        return error
+
     task = ScheduledTask(
         name=data["name"],
         description=data.get("description"),
         type=data["type"],
         payload=data["payload"],
         agent=data.get("agent"),
-        hermes_profile=data.get("hermes_profile") or None,
+        hermes_profile=hermes_profile,
         scheduled_at=scheduled_at,
         status="pending",
         created_by=current_user.id if current_user.is_authenticated else None,
@@ -105,9 +126,15 @@ def update_task(task_id):
     if not data:
         return jsonify({"error": "JSON body required"}), 400
 
-    for field in ("name", "description", "type", "payload", "agent", "hermes_profile"):
+    hermes_profile, error = _validate_hermes_profile_override(data)
+    if error:
+        return error
+
+    for field in ("name", "description", "type", "payload", "agent"):
         if field in data:
             setattr(task, field, data[field])
+    if "hermes_profile" in data:
+        task.hermes_profile = hermes_profile
 
     if "scheduled_at" in data:
         try:

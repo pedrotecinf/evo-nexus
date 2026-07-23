@@ -3,10 +3,15 @@
 Core runner for ADWs — executes Claude Code CLI with agents, visual output, logs and Telegram notification.
 """
 
+import fcntl
 import subprocess
 import os
 import sys
 import json
+import queue
+import signal
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -41,59 +46,64 @@ def _parse_usage(json_result: dict) -> dict:
         "output_tokens": usage.get("output_tokens", 0),
         "cache_creation_tokens": usage.get("cache_creation_input_tokens", 0),
         "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
-        "cost_usd": json_result.get("total_cost_usd", 0),
+        "cost_usd": (
+            json_result["total_cost_usd"]
+            if json_result.get("total_cost_usd") is not None
+            else usage.get("cost_usd", 0)
+        ),
     }
 
 
 def _save_metrics(log_name, duration, returncode, agent, stdout, usage=None):
     """Save accumulated metrics per routine in metrics.json."""
     metrics_file = LOGS_DIR / "metrics.json"
-    try:
-        metrics = json.loads(metrics_file.read_text()) if metrics_file.exists() else {}
-    except (json.JSONDecodeError, OSError):
-        metrics = {}
+    lock_file = LOGS_DIR / "metrics.json.lock"
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    key = log_name
-    if key not in metrics:
-        metrics[key] = {
-            "runs": 0, "successes": 0, "failures": 0,
-            "total_seconds": 0, "avg_seconds": 0,
-            "last_run": None, "agent": agent or "none",
-            "total_input_tokens": 0, "total_output_tokens": 0,
-            "total_cache_creation_tokens": 0, "total_cache_read_tokens": 0,
-            "total_cost_usd": 0, "avg_cost_usd": 0,
-        }
+    with open(lock_file, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            try:
+                metrics = json.loads(metrics_file.read_text()) if metrics_file.exists() else {}
+            except (json.JSONDecodeError, OSError):
+                metrics = {}
 
-    m = metrics[key]
-    m["runs"] += 1
-    m["total_seconds"] = round(m["total_seconds"] + duration, 1)
-    m["avg_seconds"] = round(m["total_seconds"] / m["runs"], 1)
-    m["last_run"] = datetime.now().isoformat()
-    m["agent"] = agent or "none"
+            if log_name not in metrics:
+                metrics[log_name] = {
+                    "runs": 0, "successes": 0, "failures": 0,
+                    "total_duration": 0, "total_cost_usd": 0,
+                    "total_input_tokens": 0, "total_output_tokens": 0,
+                    "total_cache_creation_tokens": 0, "total_cache_read_tokens": 0,
+                    "last_run": None, "last_status": None, "last_agent": None,
+                }
 
-    if returncode == 0:
-        m["successes"] += 1
-    else:
-        m["failures"] += 1
+            m = metrics[log_name]
+            m["runs"] += 1
+            m["total_duration"] += duration
+            m["last_run"] = datetime.now().isoformat()
+            m["last_status"] = "success" if returncode == 0 else "failure"
+            m["last_agent"] = agent or "default"
+            if returncode == 0:
+                m["successes"] += 1
+            else:
+                m["failures"] += 1
 
-    m["success_rate"] = round((m["successes"] / m["runs"]) * 100, 1)
+            if usage:
+                m["total_cost_usd"] += usage.get("cost_usd", 0)
+                m["total_input_tokens"] += usage.get("input_tokens", 0)
+                m["total_output_tokens"] += usage.get("output_tokens", 0)
+                m["total_cache_creation_tokens"] += usage.get("cache_creation_tokens", 0)
+                m["total_cache_read_tokens"] += usage.get("cache_read_tokens", 0)
 
-    if usage:
-        m["total_input_tokens"] = m.get("total_input_tokens", 0) + usage["input_tokens"]
-        m["total_output_tokens"] = m.get("total_output_tokens", 0) + usage["output_tokens"]
-        m["total_cache_creation_tokens"] = m.get("total_cache_creation_tokens", 0) + usage["cache_creation_tokens"]
-        m["total_cache_read_tokens"] = m.get("total_cache_read_tokens", 0) + usage["cache_read_tokens"]
-        m["total_cost_usd"] = round(m.get("total_cost_usd", 0) + usage["cost_usd"], 5)
-        m["avg_cost_usd"] = round(m["total_cost_usd"] / m["runs"], 5)
-        m["last_input_tokens"] = usage["input_tokens"]
-        m["last_output_tokens"] = usage["output_tokens"]
-        m["last_cost_usd"] = round(usage["cost_usd"], 5)
-
-    metrics_file.write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
+            tmp_file = metrics_file.with_suffix(f".{os.getpid()}.tmp")
+            tmp_file.write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
+            os.replace(tmp_file, metrics_file)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=None):
-    """Save structured log in JSONL + detailed file."""
+    """Save structured log in JSONL and a detailed local file."""
     log_file = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.jsonl"
     entry = {
         "timestamp": datetime.now().isoformat(),
@@ -119,12 +129,9 @@ def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=N
         f.write(f"DURATION: {duration:.1f}s\n")
         f.write(f"RETURNCODE: {returncode}\n")
         f.write(f"PROMPT:\n{prompt}\n\n")
-        f.write(f"{'='*60}\nSTDOUT:\n{'='*60}\n{stdout}\n\n")
+        f.write(f"{'=' * 60}\nSTDOUT:\n{'=' * 60}\n{stdout}\n\n")
         if stderr:
-            f.write(f"{'='*60}\nSTDERR:\n{'='*60}\n{stderr}\n")
-
-
-_ALLOWED_CLI_COMMANDS = frozenset({"claude", "openclaude", "hermes"})
+            f.write(f"{'=' * 60}\nSTDERR:\n{'=' * 60}\n{stderr}\n")
 
 
 def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: dict,
@@ -149,6 +156,9 @@ def _spawn_cli(cli_command: str, prompt: str, agent: str | None, provider_env: d
         text=True,
         cwd=str(WORKSPACE),
         env=env,
+        # Keep every CLI invocation in an isolated process group. This lets the
+        # timeout path terminate the CLI plus any Hermes adapter descendants.
+        start_new_session=True,
     )
 
     # Hardcoded dispatch — each branch uses a literal string for the executable
@@ -181,6 +191,28 @@ _ALLOWED_ENV_VARS = frozenset({
     "AGENT_MAX_TURNS", "HERMES_MODEL", "HERMES_PROVIDER", "HERMES_API_KEY",
     "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
 })
+
+
+def _kill_process_group(process: subprocess.Popen, grace: float = 1.0) -> None:
+    """Terminate a CLI process and every descendant in its process group."""
+    if process.poll() is not None:
+        return
+
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    try:
+        process.wait(timeout=grace)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def _get_provider_config() -> tuple[str, dict]:
@@ -250,13 +282,89 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
         stdout_lines = []
         line_count = 0
 
-        for line in process.stdout:
-            stdout_lines.append(line)
-            line_count += 1
+        # Thread-safe line reader: drain stdout without blocking the main thread.
+        # The reader thread exits when the process closes stdout or when the
+        # deadline elapses — whichever comes first.
+        #
+        # Previously (buggy):
+        #   for line in process.stdout:      # blocks forever if CLI hangs
+        #       stdout_lines.append(line)     # without closing stdout
+        #   process.wait(timeout=timeout)    # only reached after EOF — timeout never fires
+        #
+        # Fix: reader thread feeds a Queue; main thread enforces deadline per-read.
+        # If no new line arrives within _LINE_TIMEOUT, the deadline is checked;
+        # if the overall deadline is past, we kill the process and return TimeoutExpired.
+        # _LINE_TIMEOUT must be strictly less than `timeout` so the deadline has a
+        # chance to fire before Python aborts the whole process.
 
-        process.wait(timeout=timeout)
+        _LINE_TIMEOUT = 2  # seconds between lines before checking overall deadline
+        _reader_queue: queue.Queue = queue.Queue()
+        _deadline = time.monotonic() + timeout
 
-        stderr = process.stderr.read() if process.stderr else ""
+        def _reader_thread(stream, tag):
+            try:
+                for raw_line in iter(stream.readline, ""):
+                    _reader_queue.put((tag, raw_line))
+            finally:
+                _reader_queue.put((f"{tag}_eof", None))
+
+        stdout_thread = threading.Thread(
+            target=_reader_thread, args=(process.stdout, "stdout"), daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=_reader_thread, args=(process.stderr, "stderr"), daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+
+        stderr_lines = []
+        stdout_done = False
+        stderr_done = False
+        deadline_fired = False
+        while not (stdout_done and stderr_done):
+            remaining = _deadline - time.monotonic()
+            if remaining <= 0:
+                deadline_fired = True
+                break
+            try:
+                tag, data = _reader_queue.get(timeout=min(_LINE_TIMEOUT, remaining))
+            except queue.Empty:
+                continue
+
+            if tag == "stdout_eof":
+                stdout_done = True
+            elif tag == "stderr_eof":
+                stderr_done = True
+            elif tag == "stdout":
+                stdout_lines.append(data)
+                line_count += 1
+            else:
+                stderr_lines.append(data)
+
+        if deadline_fired:
+            _kill_process_group(process)
+            stdout_thread.join(timeout=2)
+            stderr_thread.join(timeout=2)
+            duration = (datetime.now() - start_time).total_seconds()
+            stderr = "".join(stderr_lines)
+            stderr = f"Timeout after {timeout}s" + (f"\n{stderr}" if stderr else "")
+            console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
+            _log_to_file(log_name, prompt, "", stderr, -1, duration)
+            return {"success": False, "stdout": "", "stderr": stderr, "returncode": -1, "duration": duration}
+
+        try:
+            process.wait(timeout=max(0, _deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            _kill_process_group(process)
+            duration = (datetime.now() - start_time).total_seconds()
+            stderr = f"Timeout after {timeout}s"
+            console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
+            _log_to_file(log_name, prompt, "", stderr, -1, duration)
+            return {"success": False, "stdout": "", "stderr": stderr, "returncode": -1, "duration": duration}
+
+        stdout_thread.join(timeout=2)
+        stderr_thread.join(timeout=2)
+        stderr = "".join(stderr_lines)
         stdout = "".join(stdout_lines)
         duration = (datetime.now() - start_time).total_seconds()
 
@@ -296,14 +404,14 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
         }
 
     except subprocess.TimeoutExpired:
-        process.kill()
+        _kill_process_group(process)
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
         _log_to_file(log_name, prompt, "", f"Timeout after {timeout}s", -1, duration)
         return {"success": False, "stdout": "", "stderr": f"Timeout after {timeout}s", "returncode": -1, "duration": duration}
 
     except KeyboardInterrupt:
-        process.kill()
+        _kill_process_group(process)
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\n  [warning]⚠ Cancelled by user[/warning]")
         _log_to_file(log_name, prompt, "", "Cancelled by user", -2, duration)

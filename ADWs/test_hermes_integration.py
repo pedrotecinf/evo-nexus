@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Add workspace to path
@@ -98,6 +99,60 @@ def test_runner_imports():
     except Exception as e:
         return False, f"Failed to import runner.py: {e}"
 
+def test_runner_timeout_kills_process_group():
+    """A silent child plus descendant must time out without leaking either process."""
+    import runner
+
+    pidfile = WORKSPACE / "ADWs" / ".timeout-grandchild.pid"
+    pidfile.unlink(missing_ok=True)
+    original_spawn = runner._spawn_cli
+
+    child_code = (
+        "import pathlib,subprocess,sys,time;"
+        "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);"
+        f"pathlib.Path({str(pidfile)!r}).write_text(str(p.pid));"
+        "time.sleep(60)"
+    )
+
+    def spawn_silent(*_args, **_kwargs):
+        return subprocess.Popen(
+            [sys.executable, "-c", child_code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+
+    try:
+        runner._spawn_cli = spawn_silent
+        started = time.monotonic()
+        result = runner.run_claude("timeout regression", log_name="timeout-regression", timeout=1)
+        elapsed = time.monotonic() - started
+    finally:
+        runner._spawn_cli = original_spawn
+
+    if result["returncode"] != -1 or result["success"]:
+        return False, f"Expected timeout result, got {result}"
+    if elapsed > 4:
+        return False, f"Timeout took {elapsed:.1f}s (expected under 4s)"
+    if not pidfile.exists():
+        return False, "Grandchild PID file was not created"
+
+    grandchild_pid = int(pidfile.read_text())
+    pidfile.unlink(missing_ok=True)
+    try:
+        os.kill(grandchild_pid, 0)
+    except ProcessLookupError:
+        return True, f"Timed out in {elapsed:.1f}s and reaped process group"
+
+    # A killed child can briefly remain as a zombie until init reaps it.
+    # Treat a zombie as terminated, not as a live process leak.
+    status_file = Path(f"/proc/{grandchild_pid}/status")
+    if status_file.exists() and "State:\tZ" in status_file.read_text():
+        return True, f"Timed out in {elapsed:.1f}s and terminated process group"
+    return False, f"Grandchild process {grandchild_pid} leaked after timeout"
+
+
 def test_adapter_output_format():
     """Test that hermes_adapter.py outputs correct format."""
     adapter_path = WORKSPACE / "ADWs" / "hermes_adapter.py"
@@ -184,6 +239,7 @@ def main():
         ("Providers Route Supports Hermes", test_providers_route_supports_hermes),
         ("Env Vars Allowed", test_env_vars_allowed),
         ("Runner Imports", test_runner_imports),
+        ("Runner Timeout Kills Process Group", test_runner_timeout_kills_process_group),
         ("Adapter Output Format", test_adapter_output_format),
         ("Hermes CLI Syntax", test_hermes_cli_syntax),
         ("Adapter Supports Profile Flag", test_adapter_supports_profile_flag),
