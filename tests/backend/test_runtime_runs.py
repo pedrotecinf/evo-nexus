@@ -67,6 +67,22 @@ def test_approval_evidence_and_recovery(app):
         assert run.status == "failed"
 
 
+def test_scheduled_task_links_to_ticket(app):
+    from models import ScheduledTask, Ticket
+    with app.app_context():
+        ticket = Ticket(id="ticket-1", title="Investigate", status="open", priority="medium", created_at="2026-01-01T00:00:00Z", updated_at="2026-01-01T00:00:00Z")
+        app.extensions["sqlalchemy"].session.add(ticket)
+        app.extensions["sqlalchemy"].session.commit()
+
+        task = ScheduledTask(name="fix", description="", type="prompt", payload="ok", scheduled_at=datetime.now(timezone.utc), ticket_id="ticket-1")
+        app.extensions["sqlalchemy"].session.add(task)
+        app.extensions["sqlalchemy"].session.commit()
+
+        fetched = ScheduledTask.query.get(task.id)
+        assert fetched.ticket_id == "ticket-1"
+        assert fetched.to_dict()["ticket_id"] == "ticket-1"
+
+
 def test_compute_metrics_aggregates_by_workflow(app):
     from models import ScheduledTask
     from runtime_runs import compute_metrics, create_run, transition

@@ -94,6 +94,14 @@ def create_task():
     if error:
         return error
 
+    ticket_id = data.get("ticket_id")
+    if ticket_id is not None:
+        if not isinstance(ticket_id, str):
+            return jsonify({"error": "ticket_id must be a string"}), 400
+        from models import Ticket
+        if Ticket.query.get(ticket_id) is None:
+            return jsonify({"error": "ticket_id does not exist"}), 404
+
     task = ScheduledTask(
         name=data["name"],
         description=data.get("description"),
@@ -101,6 +109,7 @@ def create_task():
         payload=data["payload"],
         agent=data.get("agent"),
         hermes_profile=hermes_profile,
+        ticket_id=ticket_id,
         scheduled_at=scheduled_at,
         status="pending",
         created_by=current_user.id if current_user.is_authenticated else None,

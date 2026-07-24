@@ -451,6 +451,10 @@ with app.app_context():
         if "hermes_profile" not in _st_cols:
             _cur.execute("ALTER TABLE scheduled_tasks ADD COLUMN hermes_profile TEXT")
             _conn.commit()
+        if "ticket_id" not in _st_cols:
+            _cur.execute("ALTER TABLE scheduled_tasks ADD COLUMN ticket_id TEXT")
+            _cur.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_ticket_id ON scheduled_tasks(ticket_id)")
+            _conn.commit()
     # --- End Hermes profile migration ---
 
     # --- Knowledge connections migration (pgvector-knowledge feature) ---
