@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
 
-from models import EventOutbox, RuntimeRun, RuntimeRunApproval, RuntimeRunEvidence, ScheduledTask, has_permission
+from models import EventOutbox, RuntimeRun, RuntimeRunApproval, RuntimeRunEvidence, ScheduledTask, db, has_permission
 from runtime_runs import add_evidence, compute_metrics, create_run, decide_approval, request_approval, transition
 
 bp = Blueprint("runtime_runs", __name__)
@@ -56,8 +56,16 @@ def retry_run(run_id: str):
     if run.status != "failed":
         return jsonify({"error": "Only failed runs can be retried"}), 400
     task = ScheduledTask.query.get_or_404(run.task_id)
-    retry = create_run(task.id, requested_profile=run.requested_profile, resolved_profile=run.resolved_profile, provider=run.runtime_provider)
-    return jsonify(retry.to_dict()), 201
+    if task.status != "failed":
+        return jsonify({"error": f"Cannot retry task with status '{task.status}'"}), 400
+    task.status = "pending"
+    task.error = None
+    task.completed_at = None
+    db.session.commit()
+    from routes.tasks import _start_task
+    if not _start_task(task.id):
+        return jsonify({"error": "Task could not be claimed for retry"}), 409
+    return jsonify({"task": task.to_dict(), "previous_run": run.to_dict()}), 202
 
 
 @bp.route("/api/runtime-runs/<string:run_id>/approval", methods=["POST"])

@@ -70,9 +70,8 @@ def main():
     else:
         env = os.environ.copy()
 
-    if args.agent:
-        # Hermes uses --skills or --profile for agents
-        hermes_cmd.extend(["--skills", args.agent])
+    # EvoNexus agents identify personas; Hermes profiles control permissions.
+    # Never reinterpret an agent slug as a Hermes skill: most slugs are not skills.
 
     hermes_cmd.extend(["chat", "-Q", "-q", args.prompt])
 

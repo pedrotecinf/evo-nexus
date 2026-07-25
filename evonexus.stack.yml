@@ -23,7 +23,7 @@ version: "3.7"
 services:
 
   evonexus_dashboard:
-    image: evoapicloud/evo-nexus-dashboard:latest
+    image: ${EVONEXUS_IMAGE:-evoapicloud/evo-nexus-dashboard:latest}
 
     volumes:
       - evonexus_config:/workspace/config
@@ -34,6 +34,7 @@ services:
       - evonexus_agent_memory:/workspace/.claude/agent-memory
       - evonexus_claude_auth:/root/.claude
       - evonexus_codex_auth:/root/.codex
+      - evonexus_hermes_auth:/root/.hermes
 
     networks:
       - traefik-public
@@ -99,6 +100,7 @@ services:
       - evonexus_agent_memory:/workspace/.claude/agent-memory
       - evonexus_claude_auth:/root/.claude
       - evonexus_codex_auth:/root/.codex
+      - evonexus_hermes_auth:/root/.hermes
 
     networks:
       - traefik-public
@@ -123,7 +125,7 @@ services:
           memory: 1024M
 
   evonexus_scheduler:
-    image: evoapicloud/evo-nexus-runtime:latest
+    image: ${EVONEXUS_IMAGE:-evoapicloud/evo-nexus-dashboard:latest}
     command: ["uv", "run", "python", "scheduler.py"]
 
     volumes:
@@ -132,14 +134,15 @@ services:
       - evonexus_memory:/workspace/memory
       - evonexus_adw_logs:/workspace/ADWs/logs
       - evonexus_agent_memory:/workspace/.claude/agent-memory
+      - evonexus_claude_auth:/root/.claude
       - evonexus_codex_auth:/root/.codex
+      - evonexus_hermes_auth:/root/.hermes
 
     networks:
       - traefik-public
 
     environment:
       - TZ=America/Sao_Paulo
-      - REQUIRE_ANTHROPIC_KEY=1
 
     deploy:
       placement:
@@ -159,6 +162,7 @@ volumes:
   evonexus_agent_memory:
   evonexus_claude_auth:
   evonexus_codex_auth:
+  evonexus_hermes_auth:
 
 networks:
   traefik-public:

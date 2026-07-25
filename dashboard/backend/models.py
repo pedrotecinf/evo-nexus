@@ -243,6 +243,12 @@ class ScheduledTask(db.Model):
     result_summary = db.Column(db.Text, nullable=True)
     error = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    attempt = db.Column(db.Integer, nullable=False, default=0)
+    provider = db.Column(db.String(64), nullable=True)
+    resolved_profile = db.Column(db.String(64), nullable=True)
+    workflow_policy = db.Column(db.String(100), nullable=True)
+    fallback_reason = db.Column(db.Text, nullable=True)
+    runtime_run_id = db.Column(db.String(36), nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -262,6 +268,12 @@ class ScheduledTask(db.Model):
             "result_summary": self.result_summary,
             "error": self.error,
             "created_by": self.created_by,
+            "attempt": self.attempt,
+            "provider": self.provider,
+            "resolved_profile": self.resolved_profile,
+            "workflow_policy": self.workflow_policy,
+            "fallback_reason": self.fallback_reason,
+            "runtime_run_id": self.runtime_run_id,
         }
 
 

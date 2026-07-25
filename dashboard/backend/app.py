@@ -480,6 +480,19 @@ with app.app_context():
             _cur.execute("ALTER TABLE scheduled_tasks ADD COLUMN ticket_id TEXT")
             _cur.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_ticket_id ON scheduled_tasks(ticket_id)")
             _conn.commit()
+        for _column, _definition in (
+            ("attempt", "INTEGER NOT NULL DEFAULT 0"),
+            ("provider", "TEXT"),
+            ("resolved_profile", "TEXT"),
+            ("workflow_policy", "TEXT"),
+            ("fallback_reason", "TEXT"),
+            ("runtime_run_id", "TEXT"),
+        ):
+            if _column not in _st_cols:
+                _cur.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {_column} {_definition}")
+                _conn.commit()
+        _cur.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_runtime_run ON scheduled_tasks(runtime_run_id)")
+        _conn.commit()
     # --- End Hermes profile migration ---
 
     # --- Knowledge connections migration (pgvector-knowledge feature) ---
@@ -1243,17 +1256,14 @@ if __name__ == "__main__":
 
         try:
             now = _dt.now(_tz.utc)
-            pending = ScheduledTask.query.filter(
-                ScheduledTask.status == "pending",
-                ScheduledTask.scheduled_at <= now,
-            ).all()
-
-            for task in pending:
+            from routes.tasks import claim_due_tasks
+            for task_id in claim_due_tasks(now):
+                task = ScheduledTask.query.get(task_id)
                 log_path = WORKSPACE / "ADWs" / "logs" / "scheduler.log"
                 with open(log_path, "a") as log:
                     log.write(f"  [{_dt.now().strftime('%H:%M')}] Running scheduled task #{task.id}: {task.name}\n")
 
-                t = threading.Thread(target=_execute_task_with_context, args=(task.id,), daemon=True)
+                t = threading.Thread(target=_execute_task_with_context, args=(task_id,), daemon=True)
                 t.start()
         except Exception:
             pass
@@ -1261,7 +1271,7 @@ if __name__ == "__main__":
     def _execute_task_with_context(task_id):
         with app.app_context():
             from routes.tasks import _execute_task
-            _execute_task(task_id)
+            _execute_task(task_id, already_claimed=True)
 
     def _poll_scheduled_tasks():
         """Lightweight thread that only polls ScheduledTask — no routine scheduling."""
