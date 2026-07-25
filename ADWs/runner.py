@@ -589,7 +589,10 @@ def run_script(func, log_name: str = "unnamed", timeout: int = 120, triggered_by
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [error]({e})[/error]")
         _log_to_file(log_name, f"[systematic] {log_name}", "", str(e), -3, duration, triggered_by=triggered_by)
-        _save_metrics(log_name, duration, -3, "system", str(e))
+        try:
+            _save_metrics(log_name, duration, -3, "system", str(e))
+        except Exception as telemetry_error:
+            console.print(f"\r  [warning]⚠ Metrics error for {log_name}: {telemetry_error}[/warning]")
         return {"success": False, "stdout": "", "stderr": str(e), "returncode": -3, "duration": duration}
 
 

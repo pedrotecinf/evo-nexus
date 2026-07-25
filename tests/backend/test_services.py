@@ -74,3 +74,22 @@ def test_swarm_service_actions_do_not_claim_local_control(monkeypatch):
 
     assert response.status_code == 409
     assert "Swarm" in response.get_json()["error"]
+
+
+def test_list_services_has_one_container_aware_dashboard_entry(monkeypatch):
+    services = _services_module()
+    app = Flask(__name__)
+    app.register_blueprint(services.bp)
+    monkeypatch.setattr(services, "_check_process", lambda *args, **kwargs: {"running": False, "detail": ""})
+
+    response = app.test_client().get("/api/services")
+
+    dashboards = [service for service in response.get_json() if service["id"] == "dashboard"]
+    assert dashboards == [{
+        "id": "dashboard",
+        "name": "Dashboard",
+        "description": "Dashboard API and web interface",
+        "command": "make dashboard-app",
+        "running": True,
+        "detail": "Running (serving this API)",
+    }]

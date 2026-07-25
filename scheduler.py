@@ -25,6 +25,9 @@ STATUS_FILE = WORKSPACE / "ADWs" / "logs" / "scheduler-status.json"
 _reload_flag = threading.Event()
 
 
+HEARTBEAT_INTERVAL_SECONDS = 30
+
+
 def write_status() -> None:
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATUS_FILE.with_suffix(".tmp")
@@ -33,6 +36,27 @@ def write_status() -> None:
         encoding="utf-8",
     )
     temporary.replace(STATUS_FILE)
+
+
+def _heartbeat_loop(stop_event: threading.Event, interval: float = HEARTBEAT_INTERVAL_SECONDS) -> None:
+    while not stop_event.is_set():
+        try:
+            write_status()
+        except Exception as error:
+            print(f"  [heartbeat] unable to write status: {error}", file=sys.stderr)
+        stop_event.wait(interval)
+
+
+def _start_heartbeat(interval: float = HEARTBEAT_INTERVAL_SECONDS) -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_heartbeat_loop,
+        args=(stop_event, interval),
+        name="scheduler-heartbeat",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
 
 
 def _handle_sighup(signum, frame):
@@ -292,12 +316,15 @@ def main():
 
     print("EvoNexus Scheduler")
     setup_schedule()
-    write_status()
     total = len(schedule.get_jobs())
     print(f"  {total} routines scheduled")
     print(f"  Press Ctrl+C to stop\n")
 
+    heartbeat_stop, heartbeat_thread = _start_heartbeat()
+
     def shutdown(sig, frame):
+        heartbeat_stop.set()
+        heartbeat_thread.join(timeout=HEARTBEAT_INTERVAL_SECONDS + 1)
         release_lock()
         print("\n  Scheduler stopped")
         sys.exit(0)
@@ -319,7 +346,6 @@ def main():
             print(f"  {ts} [reload] {total} routines scheduled")
 
         schedule.run_pending()
-        write_status()
         now = datetime.now()
         if now.day == 1 and now.hour == 8 and not monthly_ran:
             for r in _monthly_routines:

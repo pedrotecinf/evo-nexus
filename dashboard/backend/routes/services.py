@@ -118,13 +118,6 @@ def list_services():
             "category": "channel",
             **_check_process(["screen", "-list"], pipe_grep="imessage"),
         },
-        {
-            "id": "dashboard",
-            "name": "Dashboard App",
-            "description": "This dashboard (React + Flask)",
-            "command": "make dashboard-app",
-            **_check_process(["ps", "aux"], pipe_grep="app.py"),
-        },
     ]
 
     return jsonify(services)

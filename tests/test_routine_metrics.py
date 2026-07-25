@@ -78,3 +78,20 @@ def test_run_script_keeps_success_when_metrics_telemetry_fails(runner, monkeypat
     assert result["success"] is True
     assert result["returncode"] == 0
     assert telemetry_calls == [0]
+
+
+def test_run_script_keeps_primary_failure_when_metrics_telemetry_fails(runner, monkeypatch):
+    log_calls = []
+    monkeypatch.setattr(runner, "_log_to_file", lambda *args, **kwargs: log_calls.append(args[4]))
+    monkeypatch.setattr(runner, "_save_metrics", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")))
+
+    result = runner.run_script(lambda: (_ for _ in ()).throw(RuntimeError("primary failure")), "manual-run")
+
+    assert result == {
+        "success": False,
+        "stdout": "",
+        "stderr": "primary failure",
+        "returncode": -3,
+        "duration": pytest.approx(result["duration"]),
+    }
+    assert log_calls == [-3]
