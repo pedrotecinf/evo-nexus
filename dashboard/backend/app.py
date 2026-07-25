@@ -166,6 +166,21 @@ with app.app_context():
             CREATE INDEX IF NOT EXISTS idx_hb_trig_hb_created ON heartbeat_triggers(heartbeat_id, created_at);
         """)
         _conn.commit()
+    # --- Heartbeat runs: decision/provider/profile columns (F9/F10 parity) ---
+    _hbr_cols = {row[1] for row in _cur.execute("PRAGMA table_info(heartbeat_runs)").fetchall()}
+    for _col, _type in [
+        ("decision_action", "TEXT"),
+        ("decision_json", "TEXT"),
+        ("provider", "TEXT"),
+        ("resolved_profile", "TEXT"),
+        ("stdout_tail", "TEXT"),
+        ("stderr_tail", "TEXT"),
+        ("runtime_run_id", "TEXT"),
+    ]:
+        if _col not in _hbr_cols:
+            _cur.execute(f"ALTER TABLE heartbeat_runs ADD COLUMN {_col} {_type}")
+    _conn.commit()
+    # --- End heartbeat_runs migration ---
     # --- End heartbeats migration ---
 
     # --- Goal Cascade migration (Feature 1.2) ---

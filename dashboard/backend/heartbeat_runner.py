@@ -166,14 +166,22 @@ def step4_pick_priority(identity: str, approvals: list, inbox: list, decision_pr
 
 
 # ── Step 5: Atomic checkout ──────────────────────────────────────────────────
-# Locking semantics live in `ticket_inbox.checkout_ticket` (Feature 1.3).
-# When the heartbeat decides to act on a ticket from step 3, the work code
-# (Claude subprocess in step 7) is responsible for calling `ticket_inbox` to
-# lock it. This step is a no-op pass-through — kept for protocol numbering.
 
-def step5_atomic_checkout(task_id: str | None, run_id: str, conn) -> bool:
-    """No-op pass-through. See ticket_inbox.checkout_ticket for real lock semantics."""
-    return True
+def step5_atomic_checkout(task_id: str | None, run_id: str, lock_timeout: int, conn) -> bool:
+    """Atomic ticket checkout. Returns True if lock acquired or no ticket to lock."""
+    if not task_id:
+        return True
+    try:
+        now = _now_iso()
+        cursor = conn.execute(
+            """UPDATE tickets SET locked_at = ?, locked_by = ?
+               WHERE id = ? AND locked_at IS NULL""",
+            (now, run_id, task_id),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    except Exception:
+        return True  # tickets table may not exist — proceed without lock
 
 
 # ── Step 6: Assemble context ──────────────────────────────────────────────────
@@ -357,6 +365,26 @@ def step7_invoke_claude(
     }
 
 
+# ── Decision parsing ─────────────────────────────────────────────────────────
+
+def parse_decision(output: str) -> tuple[str, dict | None]:
+    """Extract {"action":"work"|"skip"} from runtime output. Returns (action, raw_json_or_None)."""
+    if not output:
+        return "work", None
+    for line in reversed(output.strip().splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+            action = data.get("action", "").lower()
+            if action in ("work", "skip"):
+                return action, data
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return "work", None
+
+
 # ── Step 8: Persist status ────────────────────────────────────────────────────
 
 def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str | None, triggered_by: str, prompt_preview: str, conn):
@@ -372,16 +400,28 @@ def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str 
         print(f"[heartbeat_runner] run_id={run_id} already finalized ({existing['status']}), skipping duplicate persist", flush=True)
         return
 
+    decision_json = result.get("decision_json")
     conn.execute(
         """INSERT INTO heartbeat_runs
            (run_id, heartbeat_id, trigger_id, started_at, ended_at, duration_ms,
-            tokens_in, tokens_out, cost_usd, status, prompt_preview, error, triggered_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            tokens_in, tokens_out, cost_usd, status, prompt_preview, error, triggered_by,
+            decision_action, decision_json, provider, resolved_profile, stdout_tail, stderr_tail, runtime_run_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(run_id) DO UPDATE SET
                ended_at=excluded.ended_at,
                duration_ms=excluded.duration_ms,
+               tokens_in=excluded.tokens_in,
+               tokens_out=excluded.tokens_out,
+               cost_usd=excluded.cost_usd,
                status=excluded.status,
-               error=excluded.error""",
+               error=excluded.error,
+               decision_action=excluded.decision_action,
+               decision_json=excluded.decision_json,
+               provider=excluded.provider,
+               resolved_profile=excluded.resolved_profile,
+               stdout_tail=excluded.stdout_tail,
+               stderr_tail=excluded.stderr_tail,
+               runtime_run_id=excluded.runtime_run_id""",
         (
             run_id, heartbeat_id, trigger_id,
             result.get("started_at", now), now,
@@ -391,6 +431,13 @@ def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str 
             prompt_preview[:1000] if prompt_preview else None,
             result.get("error"),
             triggered_by,
+            result.get("decision_action"),
+            json.dumps(decision_json) if decision_json else None,
+            result.get("provider"),
+            result.get("resolved_profile"),
+            (result.get("output") or "")[-2000:] or None,
+            (result.get("error") or "")[-2000:] or None,
+            result.get("runtime_run_id"),
         ),
     )
     conn.commit()
@@ -417,18 +464,18 @@ def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str 
 # ── Step 9: Release checkout ──────────────────────────────────────────────────
 
 def step9_release_checkout(task_id: str | None, run_id: str, conn):
-    """Release task lock. Stub in F1.1."""
+    """Release ticket lock. Owner-only: only the run that acquired it can release."""
     if not task_id:
         return
     try:
         conn.execute(
-            """UPDATE tasks SET locked_at = NULL, locked_by = NULL
+            """UPDATE tickets SET locked_at = NULL, locked_by = NULL
                WHERE id = ? AND locked_by = ?""",
             (task_id, run_id),
         )
         conn.commit()
     except Exception:
-        pass  # Table may not exist in F1.1
+        pass  # Table may not exist
 
 
 # ── System heartbeat dispatcher ───────────────────────────────────────────────
@@ -559,7 +606,7 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
 
                 # Step 5
                 task_id = None  # no specific task in F1.1
-                checkout_ok = step5_atomic_checkout(task_id, run_id, conn)
+                checkout_ok = step5_atomic_checkout(task_id, run_id, hb.get("lock_timeout_seconds", 1800), conn)
                 if not checkout_ok:
                     print(f"[heartbeat_runner] step5 checkout conflict, skipping", flush=True)
                     result = {"status": "success", "error": None, "agent": hb["agent"], "duration_ms": 0}
@@ -621,6 +668,13 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
                     )
                     invoke_result["agent"] = hb["agent"]
                     invoke_result["started_at"] = started_at
+                    # Parse decision contract from output
+                    decision_action, decision_data = parse_decision(invoke_result.get("output", ""))
+                    invoke_result["decision_action"] = decision_action
+                    invoke_result["decision_json"] = decision_data
+                    if decision_action == "skip":
+                        invoke_result["status"] = "success"
+                        print(f"[heartbeat_runner] step7 decision=skip, stopping early", flush=True)
                     result = invoke_result
                     print(f"[heartbeat_runner] step7 done status={result['status']} duration_ms={result.get('duration_ms')}", flush=True)
 
