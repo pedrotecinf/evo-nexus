@@ -9,8 +9,8 @@ name: Build & Publish Docker Images (Swarm)
 # a single multi-arch manifest via docker buildx imagetools.
 #
 # Triggers:
-#   * push to main            -> builds + publishes :latest
-#   * push of a version tag   -> builds + publishes :vX.Y.Z and :latest
+#   * push to main            -> builds + publishes immutable :sha-<revision>
+#   * push of a version tag   -> builds + publishes :vX.Y.Z and :sha-<revision>
 #   * manual dispatch         -> builds without pushing (dry-run)
 #
 # Required repository secrets:
@@ -74,8 +74,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}
-          flavor: |
-            latest=${{ github.ref_type == 'tag' || github.ref == 'refs/heads/main' }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -149,8 +147,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}
-          flavor: |
-            latest=${{ github.ref_type == 'tag' || github.ref == 'refs/heads/main' }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
