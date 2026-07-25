@@ -135,7 +135,7 @@ def _save_metrics(log_name, duration, returncode, agent, stdout, usage=None):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=None):
+def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=None, triggered_by=None):
     """Save structured log in JSONL and a detailed local file."""
     log_file = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.jsonl"
     entry = {
@@ -146,6 +146,7 @@ def _log_to_file(log_name, prompt, stdout, stderr, returncode, duration, usage=N
         "duration_seconds": round(duration, 1),
         "stdout_lines": len(stdout.splitlines()),
         "stderr_lines": len(stderr.splitlines()),
+        "triggered_by": triggered_by or os.environ.get("EVONEXUS_TRIGGERED_BY") or "schedule",
     }
     if usage:
         entry["input_tokens"] = usage["input_tokens"]
@@ -283,7 +284,7 @@ def _get_provider_config() -> tuple[str, dict]:
 
 
 def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent: str = None,
-               profile: str = None, on_process=None) -> dict:
+               profile: str = None, on_process=None, triggered_by: str = None) -> dict:
     """
     Execute AI CLI (claude, openclaude, or hermes) with streaming output.
 
@@ -385,7 +386,7 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
             stderr = "".join(stderr_lines)
             stderr = f"Timeout after {timeout}s" + (f"\n{stderr}" if stderr else "")
             console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
-            _log_to_file(log_name, prompt, "", stderr, -1, duration)
+            _log_to_file(log_name, prompt, "", stderr, -1, duration, triggered_by=triggered_by)
             return {"success": False, "stdout": "", "stderr": stderr, "returncode": -1, "duration": duration}
 
         try:
@@ -395,7 +396,7 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
             duration = (datetime.now() - start_time).total_seconds()
             stderr = f"Timeout after {timeout}s"
             console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
-            _log_to_file(log_name, prompt, "", stderr, -1, duration)
+            _log_to_file(log_name, prompt, "", stderr, -1, duration, triggered_by=triggered_by)
             return {"success": False, "stdout": "", "stderr": stderr, "returncode": -1, "duration": duration}
 
         stdout_thread.join(timeout=2)
@@ -415,7 +416,7 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
             pass
 
         full_prompt = f"[agent:{agent}] {prompt}" if agent else prompt
-        _log_to_file(log_name, full_prompt, result_text, stderr, process.returncode, duration, usage)
+        _log_to_file(log_name, full_prompt, result_text, stderr, process.returncode, duration, usage, triggered_by)
         try:
             _save_metrics(log_name, duration, process.returncode, agent, result_text, usage)
         except Exception as telemetry_error:
@@ -446,20 +447,20 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
         _kill_process_group(process)
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
-        _log_to_file(log_name, prompt, "", f"Timeout after {timeout}s", -1, duration)
+        _log_to_file(log_name, prompt, "", f"Timeout after {timeout}s", -1, duration, triggered_by=triggered_by)
         return {"success": False, "stdout": "", "stderr": f"Timeout after {timeout}s", "returncode": -1, "duration": duration}
 
     except KeyboardInterrupt:
         _kill_process_group(process)
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\n  [warning]⚠ Cancelled by user[/warning]")
-        _log_to_file(log_name, prompt, "", "Cancelled by user", -2, duration)
+        _log_to_file(log_name, prompt, "", "Cancelled by user", -2, duration, triggered_by=triggered_by)
         raise
 
     except Exception as e:
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [error]({e})[/error]")
-        _log_to_file(log_name, prompt, "", str(e), -3, duration)
+        _log_to_file(log_name, prompt, "", str(e), -3, duration, triggered_by=triggered_by)
         return {"success": False, "stdout": "", "stderr": str(e), "returncode": -3, "duration": duration}
 
 
@@ -520,7 +521,7 @@ def run_skill(
     return result
 
 
-def run_script(func, log_name: str = "unnamed", timeout: int = 120) -> dict:
+def run_script(func, log_name: str = "unnamed", timeout: int = 120, triggered_by: str = None) -> dict:
     """
     Execute a pure Python function (no Claude CLI, no AI, no tokens).
     Same logging/metrics as run_claude but with cost=0.
@@ -553,7 +554,7 @@ def run_script(func, log_name: str = "unnamed", timeout: int = 120) -> dict:
         summary_text = result.get("summary", str(result)) if isinstance(result, dict) else str(result)
         returncode = 0 if ok else 1
 
-        _log_to_file(log_name, f"[systematic] {log_name}", summary_text, "", returncode, duration)
+        _log_to_file(log_name, f"[systematic] {log_name}", summary_text, "", returncode, duration, triggered_by=triggered_by)
         try:
             _save_metrics(log_name, duration, returncode, "system", summary_text)
         except Exception as telemetry_error:
@@ -576,7 +577,7 @@ def run_script(func, log_name: str = "unnamed", timeout: int = 120) -> dict:
     except TimeoutError:
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [warning](timeout {timeout}s)[/warning]")
-        _log_to_file(log_name, f"[systematic] {log_name}", "", f"Timeout after {timeout}s", -1, duration)
+        _log_to_file(log_name, f"[systematic] {log_name}", "", f"Timeout after {timeout}s", -1, duration, triggered_by=triggered_by)
         return {"success": False, "stdout": "", "stderr": f"Timeout after {timeout}s", "returncode": -1, "duration": duration}
 
     except KeyboardInterrupt:
@@ -587,7 +588,7 @@ def run_script(func, log_name: str = "unnamed", timeout: int = 120) -> dict:
     except Exception as e:
         duration = (datetime.now() - start_time).total_seconds()
         console.print(f"\r  [error]✗[/error] {log_name} [error]({e})[/error]")
-        _log_to_file(log_name, f"[systematic] {log_name}", "", str(e), -3, duration)
+        _log_to_file(log_name, f"[systematic] {log_name}", "", str(e), -3, duration, triggered_by=triggered_by)
         _save_metrics(log_name, duration, -3, "system", str(e))
         return {"success": False, "stdout": "", "stderr": str(e), "returncode": -3, "duration": duration}
 

@@ -710,9 +710,11 @@ def run_control_routine(routine_id: str, correlation_id: str):
     try:
         import shutil
         python = shutil.which("python3") or "python3"
+        env = os.environ.copy()
+        env["EVONEXUS_TRIGGERED_BY"] = "manual"
         proc = subprocess.run(
             [python, str(script_path)],
-            capture_output=True, text=True, timeout=900, cwd=str(WORKSPACE),
+            capture_output=True, text=True, timeout=900, cwd=str(WORKSPACE), env=env,
         )
         response = {
             "routine_id": routine_id,

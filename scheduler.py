@@ -71,7 +71,7 @@ def release_lock():
     PID_FILE.unlink(missing_ok=True)
 
 
-def run_adw(name: str, script: str, args: str = ""):
+def run_adw(name: str, script: str, args: str = "", triggered_by: str = "schedule"):
     """Execute a routine as subprocess."""
     now = datetime.now().strftime("%H:%M")
     script_path = ROUTINES_DIR / script
@@ -83,6 +83,8 @@ def run_adw(name: str, script: str, args: str = ""):
         cmd = f"{PYTHON} {script_path}"
         if args:
             cmd += f" {args}"
+        env = os.environ.copy()
+        env["EVONEXUS_TRIGGERED_BY"] = triggered_by
         result = subprocess.run(
             cmd,
             shell=True,
@@ -90,6 +92,7 @@ def run_adw(name: str, script: str, args: str = ""):
             timeout=900,
             capture_output=True,
             text=True,
+            env=env,
         )
         status = "✓" if result.returncode == 0 else "✗"
         print(f"  {now} {status} {name}")

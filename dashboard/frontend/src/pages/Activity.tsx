@@ -256,7 +256,7 @@ function ActivityDrawer({ item, onClose }: DrawerProps) {
               { label: 'Started', value: item.started_at ? formatTime(item.started_at) : '--' },
               { label: 'Finished', value: item.ended_at ? formatTime(item.ended_at) : norm === 'running' ? 'Still running' : '--' },
               { label: 'Duration', value: formatDuration(item.duration_ms, item.duration_seconds) },
-              { label: 'Triggered by', value: item.triggered_by ?? 'schedule' },
+              { label: 'Triggered by', value: item.triggered_by ?? '--' },
             ].map(({ label, value }) => (
               <div key={label} className="bg-[#161b22] border border-[#21262d] rounded-xl p-3">
                 <p className="text-[10px] uppercase tracking-wider text-[#667085] mb-1">{label}</p>
@@ -379,14 +379,14 @@ export default function ActivityPage() {
           const ts = log.timestamp || log.started_at || ''
           const durMs = log.duration_ms ?? (log.duration_seconds != null ? log.duration_seconds * 1000 : null)
           results.push({
-            id: `routine-${name}-${ts || Date.now()}`,
+            id: log.id || `routine-${name}-${ts || 'unknown'}`,
             type: 'routine',
             name,
             status,
             started_at: ts,
             ended_at: log.ended_at || log.completed_at || null,
             duration_ms: durMs,
-            triggered_by: log.triggered_by || 'schedule',
+            triggered_by: log.triggered_by || null,
             error: log.error || log.stderr || (rc != null && rc !== 0 ? `Exit code ${rc}` : null),
             routine_name: name,
             cost_usd: log.cost_usd ?? null,

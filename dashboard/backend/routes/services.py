@@ -1,5 +1,6 @@
 """Services endpoint — check running background services."""
 
+import os
 import subprocess
 from flask import Blueprint, jsonify
 from routes._helpers import WORKSPACE
@@ -114,7 +115,9 @@ def run_routine(routine_id):
     python_bin = shutil.which("uv")
     cmd_args = ["uv", "run", "python", str(script_path)] if python_bin else ["python3", str(script_path)]
     try:
-        subprocess.Popen(cmd_args, cwd=WORKSPACE_STR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = os.environ.copy()
+        env["EVONEXUS_TRIGGERED_BY"] = "manual"
+        subprocess.Popen(cmd_args, cwd=WORKSPACE_STR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
         return jsonify({"status": "started", "routine": routine_id, "script": script})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

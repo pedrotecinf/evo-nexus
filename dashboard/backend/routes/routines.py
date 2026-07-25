@@ -105,28 +105,20 @@ def get_routines():
 @bp.route("/api/routines/logs")
 def get_routine_logs():
     target = request.args.get("date", date.today().isoformat())
-    # Look for JSONL files matching the date
     entries = []
     if LOGS_DIR.is_dir():
-        for f in LOGS_DIR.iterdir():
-            if f.suffix == ".jsonl" and target in f.name:
-                text = safe_read(f)
-                if text:
-                    for line in text.strip().splitlines():
-                        try:
-                            entries.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            continue
-        # Also check a generic log file
-        generic = LOGS_DIR / f"{target}.jsonl"
-        if generic.is_file():
-            text = safe_read(generic)
-            if text:
-                for line in text.strip().splitlines():
-                    try:
-                        entries.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
+        for log_file in sorted(LOGS_DIR.glob(f"*{target}*.jsonl")):
+            text = safe_read(log_file)
+            if not text:
+                continue
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(entry, dict):
+                    entry["id"] = f"routine-log-{log_file.name}-{line_number}"
+                    entries.append(entry)
     return jsonify(entries)
 
 
