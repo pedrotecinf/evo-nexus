@@ -611,3 +611,121 @@ def run_control_scheduled_task(task_id: int, correlation_id: str):
     _audit("run_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "queued")
     db.session.commit()
     return _response(response, status=202, correlation_id=correlation_id)
+
+
+# ────────────────── Routines ──────────────────────────────────────────────────
+
+@bp.route("/api/control/v1/routines")
+@_require("routines:read")
+def list_control_routines(correlation_id: str):
+    from routes._helpers import discover_routines, WORKSPACE, safe_read
+    import json as _json
+    metrics_path = WORKSPACE / "ADWs" / "logs" / "metrics.json"
+    metrics: dict = {}
+    content = safe_read(metrics_path)
+    if content:
+        try:
+            metrics = _json.loads(content) or {}
+        except Exception:
+            pass
+    registry = discover_routines()
+    result = []
+    for make_id, spec in registry.items():
+        entry = {
+            "id": make_id,
+            "name": spec.get("name") or make_id,
+            "agent": spec.get("agent", ""),
+            "custom": spec.get("custom", False),
+        }
+        m = metrics.get(make_id)
+        if isinstance(m, dict):
+            entry["runs"] = m.get("runs", 0)
+            entry["last_run"] = m.get("last_run")
+            entry["success_rate"] = m.get("success_rate", 0)
+            entry["total_cost_usd"] = m.get("total_cost_usd", 0.0)
+        else:
+            entry["runs"] = 0
+            entry["last_run"] = None
+            entry["success_rate"] = 0
+            entry["total_cost_usd"] = 0.0
+        result.append(entry)
+    return _response(result, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/routines/<string:routine_id>/logs")
+@_require("routines:read")
+def get_control_routine_logs(routine_id: str, correlation_id: str):
+    from routes._helpers import discover_routines, WORKSPACE, safe_read
+    import json as _json
+    from datetime import date as _date
+    registry = discover_routines()
+    if routine_id not in registry:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    logs_dir = WORKSPACE / "ADWs" / "logs"
+    target = request.args.get("date", _date.today().isoformat())
+    entries = []
+    if logs_dir.is_dir():
+        for f in logs_dir.iterdir():
+            if f.suffix == ".jsonl" and target in f.name:
+                text = safe_read(f)
+                if text:
+                    for line in text.strip().splitlines():
+                        try:
+                            parsed = _json.loads(line)
+                            if isinstance(parsed, dict) and parsed.get("routine") == routine_id:
+                                entries.append(parsed)
+                        except Exception:
+                            continue
+    return _response({"routine_id": routine_id, "date": target, "entries": entries[:200]}, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/routines/<string:routine_id>/run", methods=["POST"])
+@_require("routines:run")
+def run_control_routine(routine_id: str, correlation_id: str):
+    import subprocess
+    from pathlib import Path
+    from routes._helpers import discover_routines, WORKSPACE
+
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"run_routine:{routine_id}", data, correlation_id)
+    if replay:
+        return replay
+
+    registry = discover_routines()
+    if routine_id not in registry:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+
+    script = registry[routine_id].get("script", "")
+    script_path = (WORKSPACE / "ADWs" / "routines" / script).resolve()
+    allowed_dir = (WORKSPACE / "ADWs" / "routines").resolve()
+    if not str(script_path).startswith(str(allowed_dir)):
+        return _response(error="invalid_script_path", status=400, correlation_id=correlation_id)
+    if not script_path.is_file():
+        return _response(error="script_not_found", status=404, correlation_id=correlation_id)
+
+    try:
+        import shutil
+        python = shutil.which("python3") or "python3"
+        proc = subprocess.run(
+            [python, str(script_path)],
+            capture_output=True, text=True, timeout=900, cwd=str(WORKSPACE),
+        )
+        response = {
+            "routine_id": routine_id,
+            "exit_code": proc.returncode,
+            "stdout": (proc.stdout or "")[:5000],
+            "stderr": (proc.stderr or "")[:2000],
+            "success": proc.returncode == 0,
+        }
+    except subprocess.TimeoutExpired:
+        response = {"routine_id": routine_id, "exit_code": -1, "stdout": "", "stderr": "timeout", "success": False}
+    except Exception as exc:
+        response = {"routine_id": routine_id, "exit_code": -1, "stdout": "", "stderr": str(exc)[:2000], "success": False}
+
+    status_code = 200 if response["success"] else 500
+    _record_idempotent(f"run_routine:{routine_id}", idem[0], idem[1], status_code, response)
+    _audit("run_routine", f"routine:{routine_id}", correlation_id, "success" if response["success"] else "failed")
+    db.session.commit()
+    return _response(response, status=status_code, correlation_id=correlation_id)

@@ -15,7 +15,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 @pytest.fixture
 def app(monkeypatch):
     monkeypatch.setenv("HERMES_CONTROL_API_TOKEN", "control-test-token")
-    monkeypatch.setenv("HERMES_CONTROL_API_SCOPES", "health:read,projects:read,tickets:read,tickets:write,comments:write,evidence:write,goals:read,goals:write,heartbeats:read,heartbeats:write,heartbeats:run,scheduled_tasks:read,scheduled_tasks:write,scheduled_tasks:run")
+    monkeypatch.setenv("HERMES_CONTROL_API_SCOPES", "health:read,projects:read,tickets:read,tickets:write,comments:write,evidence:write,goals:read,goals:write,heartbeats:read,heartbeats:write,heartbeats:run,scheduled_tasks:read,scheduled_tasks:write,scheduled_tasks:run,routines:read,routines:run")
     import models
     importlib.reload(models)
     import routes.control_api as control_api
@@ -237,3 +237,19 @@ def test_scheduled_task_run_now(client, app):
     resp = client.post(f"/api/control/v1/scheduled-tasks/{task_id}/run", headers=h, json={})
     assert resp.status_code == 202
     assert resp.json["data"]["status"] == "pending"
+
+
+def test_routines_list(client, monkeypatch):
+    monkeypatch.setattr("routes.control_api.discover_routines", lambda: {"morning": {"name": "Good Morning", "agent": "clawdia", "custom": False, "script": "good_morning.py", "script_key": "good_morning"}}, raising=False)
+    import routes.control_api as _mod
+    from routes._helpers import discover_routines as _real
+    monkeypatch.setattr(_mod, "discover_routines", lambda: {"morning": {"name": "Good Morning", "agent": "clawdia", "custom": False, "script": "good_morning.py", "script_key": "good_morning"}}, raising=False)
+    resp = client.get("/api/control/v1/routines", headers=headers())
+    assert resp.status_code == 200
+
+
+def test_routines_run_requires_scope(client, monkeypatch):
+    monkeypatch.setenv("HERMES_CONTROL_API_SCOPES", "routines:read")
+    h = headers(**{"Idempotency-Key": "run-routine-no-scope"})
+    resp = client.post("/api/control/v1/routines/morning/run", headers=h, json={})
+    assert resp.status_code == 403
