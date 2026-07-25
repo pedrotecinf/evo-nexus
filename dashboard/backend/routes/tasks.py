@@ -286,11 +286,16 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
             sys.path.insert(0, adw_dir)
             try:
                 from runner import run_claude, run_skill
-                result = run_skill(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile) if task.type == "skill" else run_claude(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile)
+                def track_process(process):
+                    _RUNNING_PROCESSES[task.id] = process
+                result = run_skill(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile, on_process=track_process) if task.type == "skill" else run_claude(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile, on_process=track_process)
             finally:
                 sys.path.pop(0)
             task.result_summary = (result.get("stdout") or "")[:5000]
-            if result.get("success"):
+            db.session.refresh(task)
+            if task.status == "cancelled":
+                transition(run, "cancelled")
+            elif result.get("success"):
                 if not _requirements_met(run.id):
                     raise RuntimeError("Pending or denied approval blocks successful completion")
                 task.status = "completed"

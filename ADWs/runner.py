@@ -250,7 +250,7 @@ def _get_provider_config() -> tuple[str, dict]:
 
 
 def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent: str = None,
-               profile: str = None) -> dict:
+               profile: str = None, on_process=None) -> dict:
     """
     Execute AI CLI (claude, openclaude, or hermes) with streaming output.
 
@@ -279,6 +279,8 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
 
     try:
         process = _spawn_cli(cli_command, prompt, agent, provider_env, profile)
+        if on_process:
+            on_process(process)
 
         stdout_lines = []
         line_count = 0
@@ -433,6 +435,7 @@ def run_skill(
     agent: str = None,
     notify_telegram: bool | str = False,
     profile: str = None,
+    on_process=None,
 ) -> dict:
     """Execute a skill via CLI, optionally with an agent.
 
@@ -466,7 +469,7 @@ def run_skill(
             f"---"
         )
 
-    result = run_claude(prompt, log_name or skill_name, timeout, agent=agent, profile=profile)
+    result = run_claude(prompt, log_name or skill_name, timeout, agent=agent, profile=profile, on_process=on_process)
 
     if chat_id and result.get("returncode", -1) == 0:
         stdout = result.get("stdout", "")

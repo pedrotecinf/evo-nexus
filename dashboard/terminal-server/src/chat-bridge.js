@@ -406,7 +406,7 @@ class ChatBridge {
       }
     }
 
-    console.log(`[chat-bridge] Starting Hermes session ${sessionId}: ${hermesBin} ${hermesArgs.join(' ')}`);
+    console.log(`[chat-bridge] Starting Hermes session ${sessionId} with configured profile`);
 
     // Spawn with plain pipes (NOT a pty). A pty makes Hermes/Claude think a
     // TTY is attached, so it emits OSC capability queries (e.g. `ESC ]11;?`,

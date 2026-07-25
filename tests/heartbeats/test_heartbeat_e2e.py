@@ -200,6 +200,14 @@ class TestAtomicCheckout:
         assert step5_atomic_checkout("t2", "run-2", 1800, conn) is False
         conn.close()
 
+    def test_checkout_failure_rolls_back_and_fails_closed(self):
+        from heartbeat_runner import step5_atomic_checkout
+
+        conn = MagicMock()
+        conn.execute.side_effect = sqlite3.InterfaceError("connection failed")
+        assert step5_atomic_checkout("t-fail", "run-fail", 1800, conn) is False
+        conn.rollback.assert_called_once()
+
     def test_release_only_by_owner(self, tmp_db):
         from heartbeat_runner import step9_release_checkout
         conn = _row_conn(tmp_db)
@@ -390,6 +398,22 @@ class TestTimeoutAndLockCleanup:
 # ────────────────────────────────────────────────────────────────────────────
 
 class TestProviderPersistence:
+    def test_work_claims_inbox_ticket_and_skip_leaves_it_unlocked(self, tmp_db):
+        import heartbeat_runner as runner
+
+        conn = _row_conn(tmp_db)
+        conn.execute("INSERT INTO tickets (id, title, status, priority, created_at, updated_at) VALUES ('ticket-1', 'Work', 'open', 'high', ?, ?)", (_now_iso(), _now_iso()))
+        conn.commit()
+        conn.close()
+        heartbeat = {"id": "atlas-4h", "agent": "atlas-project", "interval_seconds": 60, "max_turns": 1, "timeout_seconds": 10, "lock_timeout_seconds": 60, "enabled": True, "goal_id": None, "decision_prompt": "Decide", "handler": None, "hermes_profile": None}
+        work = {"status": "success", "output": '{"action":"work","ticket_id":"ticket-1"}', "duration_ms": 1}
+        done = {"status": "success", "output": "done", "duration_ms": 1}
+        with patch.object(runner, "_get_db", return_value=_row_conn(tmp_db)), patch.object(runner, "_load_heartbeat", return_value=heartbeat), patch.object(runner, "step1_load_identity", return_value="identity"), patch.object(runner, "step7_invoke_runtime", side_effect=[work, done]), patch.object(runner, "LOGS_DIR", tmp_db.parent / "logs"):
+            runner.run_heartbeat("atlas-4h")
+        conn = _row_conn(tmp_db)
+        assert conn.execute("SELECT locked_at FROM tickets WHERE id='ticket-1'").fetchone()["locked_at"] is None
+        conn.close()
+
     def test_provider_and_profile_stored_in_run(self, tmp_db):
         import heartbeat_runner as runner
         with patch.object(runner, "_get_db", return_value=_row_conn(tmp_db)), \

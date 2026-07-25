@@ -180,8 +180,13 @@ def step5_atomic_checkout(task_id: str | None, run_id: str, lock_timeout: int, c
         )
         conn.commit()
         return cursor.rowcount == 1
-    except Exception:
-        return True  # tickets table may not exist — proceed without lock
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"[heartbeat_runner] step5 checkout failed: {exc}", flush=True)
+        return False
 
 
 # ── Step 6: Assemble context ──────────────────────────────────────────────────
@@ -604,14 +609,8 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
                 decision_ctx = step4_pick_priority(identity, approvals, inbox, hb["decision_prompt"])
                 print(f"[heartbeat_runner] step4 decision context assembled", flush=True)
 
-                # Step 5
-                task_id = None  # no specific task in F1.1
-                checkout_ok = step5_atomic_checkout(task_id, run_id, hb.get("lock_timeout_seconds", 1800), conn)
-                if not checkout_ok:
-                    print(f"[heartbeat_runner] step5 checkout conflict, skipping", flush=True)
-                    result = {"status": "success", "error": None, "agent": hb["agent"], "duration_ms": 0}
-                    step8_persist(run_id, heartbeat_id, result, trigger_id, triggered_by, "", conn)
-                    return
+                # Step 5 occurs only after the decision selects work; a skip never locks a ticket.
+                task_id = None
 
                 # Step 6
                 full_prompt = step6_assemble_context(identity, decision_ctx, hb.get("goal_id"))
@@ -656,26 +655,32 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
                     invoke_result["started_at"] = started_at
                     result = invoke_result
                 else:
-                    # Standard Claude CLI subprocess
-                    print(f"[heartbeat_runner] step7 invoking configured provider agent={hb['agent']} max_turns={hb['max_turns']} timeout={hb['timeout_seconds']}s", flush=True)
-                    invoke_result = step7_invoke_runtime(
-                        agent=hb["agent"],
-                        prompt=full_prompt,
-                        max_turns=hb["max_turns"],
-                        timeout_seconds=hb["timeout_seconds"],
-                        heartbeat_id=heartbeat_id,
+                    decision_prompt = f"{full_prompt}\n\nReturn exactly one JSON line with action=work or action=skip. Do not perform work or side effects."
+                    decision_result = step7_invoke_runtime(
+                        agent=hb["agent"], prompt=decision_prompt, max_turns=hb["max_turns"],
+                        timeout_seconds=hb["timeout_seconds"], heartbeat_id=heartbeat_id,
                         requested_profile=hb.get("hermes_profile"),
                     )
-                    invoke_result["agent"] = hb["agent"]
-                    invoke_result["started_at"] = started_at
-                    # Parse decision contract from output
-                    decision_action, decision_data = parse_decision(invoke_result.get("output", ""))
-                    invoke_result["decision_action"] = decision_action
-                    invoke_result["decision_json"] = decision_data
-                    if decision_action == "skip":
-                        invoke_result["status"] = "success"
-                        print(f"[heartbeat_runner] step7 decision=skip, stopping early", flush=True)
-                    result = invoke_result
+                    decision_action, decision_data = parse_decision(decision_result.get("output", ""))
+                    if decision_result["status"] != "success" or decision_action == "skip":
+                        decision_result.update({"agent": hb["agent"], "started_at": started_at, "decision_action": decision_action, "decision_json": decision_data})
+                        result = decision_result
+                    else:
+                        selected_ticket_id = (decision_data or {}).get("ticket_id") or (inbox[0].get("id") if inbox else None)
+                        if selected_ticket_id:
+                            if selected_ticket_id not in {ticket["id"] for ticket in inbox}:
+                                raise ValueError("Heartbeat selected a ticket outside its inbox")
+                            if not step5_atomic_checkout(selected_ticket_id, run_id, hb.get("lock_timeout_seconds", 1800), conn):
+                                result = {"status": "fail", "error": "Ticket checkout failed", "agent": hb["agent"], "duration_ms": 0}
+                            else:
+                                task_id = selected_ticket_id
+                        if task_id or not inbox:
+                            result = step7_invoke_runtime(
+                                agent=hb["agent"], prompt=full_prompt, max_turns=hb["max_turns"],
+                                timeout_seconds=hb["timeout_seconds"], heartbeat_id=heartbeat_id,
+                                requested_profile=hb.get("hermes_profile"),
+                            )
+                            result.update({"agent": hb["agent"], "started_at": started_at, "decision_action": decision_action, "decision_json": decision_data})
                     print(f"[heartbeat_runner] step7 done status={result['status']} duration_ms={result.get('duration_ms')}", flush=True)
 
         except Exception as exc:

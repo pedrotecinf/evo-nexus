@@ -30,7 +30,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def app():
+def app(tmp_path):
     import flask
     from flask_login import LoginManager
     import models as _models
@@ -39,8 +39,10 @@ def app():
     _app = flask.Flask(__name__)
     _app.config["TESTING"] = True
     _app.config["SECRET_KEY"] = "test-tickets"
-    _app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+    db_path = tmp_path / "tickets.db"
+    _app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
     _app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    _app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"timeout": 5}}
 
     _models.db.init_app(_app)
 
