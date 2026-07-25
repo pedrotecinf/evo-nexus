@@ -8,19 +8,31 @@ Usage: runs automatically with make dashboard-app
 import subprocess
 import os
 import sys
+import json
 import signal
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 WORKSPACE = Path(__file__).parent
 PYTHON = "uv run python" if os.system("command -v uv > /dev/null 2>&1") == 0 else "python3"
 ROUTINES_DIR = WORKSPACE / "ADWs" / "routines"
 PID_FILE = WORKSPACE / "ADWs" / "logs" / "scheduler.pid"
+STATUS_FILE = WORKSPACE / "ADWs" / "logs" / "scheduler-status.json"
 
 # SIGHUP reload flag — set by handler, cleared by main loop (ADR-2)
 _reload_flag = threading.Event()
+
+
+def write_status() -> None:
+    STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = STATUS_FILE.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps({"updated_at": datetime.now(timezone.utc).isoformat()}),
+        encoding="utf-8",
+    )
+    temporary.replace(STATUS_FILE)
 
 
 def _handle_sighup(signum, frame):
@@ -280,6 +292,7 @@ def main():
 
     print("EvoNexus Scheduler")
     setup_schedule()
+    write_status()
     total = len(schedule.get_jobs())
     print(f"  {total} routines scheduled")
     print(f"  Press Ctrl+C to stop\n")
@@ -306,6 +319,7 @@ def main():
             print(f"  {ts} [reload] {total} routines scheduled")
 
         schedule.run_pending()
+        write_status()
         now = datetime.now()
         if now.day == 1 and now.hour == 8 and not monthly_ran:
             for r in _monthly_routines:
