@@ -20,7 +20,20 @@ def list_runs():
     denied = _require("view")
     if denied:
         return denied
-    return jsonify({"runs": [run.to_dict() for run in RuntimeRun.query.order_by(RuntimeRun.queued_at.desc()).limit(100)]})
+    query = RuntimeRun.query
+    filters = {
+        "origin_type": RuntimeRun.origin_type,
+        "provider": RuntimeRun.runtime_provider,
+        "profile": RuntimeRun.resolved_profile,
+        "agent": RuntimeRun.agent_slug,
+        "status": RuntimeRun.status,
+        "correlation_id": RuntimeRun.correlation_id,
+    }
+    for name, column in filters.items():
+        value = request.args.get(name)
+        if value:
+            query = query.filter(column == value)
+    return jsonify({"runs": [run.to_dict() for run in query.order_by(RuntimeRun.queued_at.desc()).limit(100)]})
 
 
 @bp.route("/api/runtime-runs/<string:run_id>")

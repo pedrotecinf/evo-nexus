@@ -478,10 +478,13 @@ class TestModelsRegression:
         assert hasattr(models, "TicketActivity")
 
     def test_ticket_statuses_constant(self):
-        from models import TICKET_STATUSES
+        from models import TICKET_STATUSES, normalize_ticket_status
         assert "open" in TICKET_STATUSES
-        assert "closed" in TICKET_STATUSES
-        assert len(TICKET_STATUSES) == 6
+        assert "blocked" in TICKET_STATUSES
+        assert "review" in TICKET_STATUSES
+        assert "archived" in TICKET_STATUSES
+        assert "waiting" not in TICKET_STATUSES
+        assert normalize_ticket_status("waiting") == "blocked"
 
     def test_ticket_priorities_constant(self):
         from models import TICKET_PRIORITIES

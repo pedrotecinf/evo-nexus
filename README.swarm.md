@@ -152,6 +152,14 @@ you removed and recreated the stack, data in `evonexus_config`,
 `evonexus_workspace`, etc. is gone unless you backed them up. Confirm
 with `docker volume ls` on the manager.
 
+## Canary e rollback do runtime
+
+Não faça rollout de Hermes em todos os serviços de uma vez. Gere as imagens do dashboard e do scheduler a partir do mesmo commit e registre os dois digests antes do canary. Configure `EVONEXUS_REVISION` e `EVONEXUS_SCHEDULER_REVISION` com esse commit; `/api/health/deep` deve indicar `runtime_revision.parity: true` antes de ampliar o rollout.
+
+No canary, valide: chat Hermes, checkout/comentário/release de ticket, heartbeat associado a goal, tarefa `skill`/`prompt`/`script`, cancelamento e recuperação após reinício. Mantenha Claude no smoke de regressão. Não exponha tokens, perfis secretos ou valores de configuração em logs, evidências ou health checks.
+
+Para rollback, retorne **dashboard e scheduler juntos** aos digests registrados. A migração de `RuntimeRun` é aditiva e mantém `task_id`; não remova colunas até expirar a janela de compatibilidade. Se o canary falhar, selecione explicitamente Claude ou desabilite o perfil Hermes afetado, pare novas execuções Hermes e preserve `RuntimeRun`/evidências para auditoria.
+
 ## What is NOT changed from the main codebase
 
 The Swarm overlay is purely additive. Every upstream file is unmodified

@@ -23,21 +23,28 @@ TRANSITIONS = {
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 
-def create_run(task_id: int | None = None, *, origin_type: str = "scheduled_task", origin_id: str | None = None, agent_slug: str | None = None, requested_profile: str | None = None, resolved_profile: str | None = None, provider: str | None = None, workflow_type: str | None = None) -> RuntimeRun:
-    if task_id is None and not origin_id:
-        raise ValueError("origin_id is required when task_id is absent")
-    origin_id = origin_id or str(task_id)
-    if task_id is not None:
-        origin_type = "scheduled_task"
-        origin_id = str(task_id)
-
-    if task_id is None:
-        prior = RuntimeRun.query.filter_by(origin_type=origin_type, origin_id=origin_id).order_by(RuntimeRun.attempt.desc()).first()
-    else:
-        prior = RuntimeRun.query.filter_by(task_id=task_id).order_by(RuntimeRun.attempt.desc()).first()
+def create_run(
+    task_id: int | None = None,
+    *,
+    origin_type: str | None = None,
+    origin_id: str | None = None,
+    ticket_id: str | None = None,
+    goal_id: int | None = None,
+    agent_slug: str | None = None,
+    requested_profile: str | None = None,
+    resolved_profile: str | None = None,
+    provider: str | None = None,
+    workflow_type: str | None = None,
+) -> RuntimeRun:
     from ecc_catalog import resolve_workflow
 
-    workflow = resolve_workflow(workflow_type) if workflow_type else None
+    if task_id is None and not (origin_type and origin_id):
+        raise ValueError("task_id or origin_type with origin_id is required")
+    origin_type = origin_type or "scheduled_task"
+    origin_id = origin_id or str(task_id)
+    prior_query = RuntimeRun.query.filter_by(origin_type=origin_type, origin_id=origin_id)
+    prior = prior_query.order_by(RuntimeRun.attempt.desc()).first()
+    workflow = resolve_workflow(workflow_type) if workflow_type and task_id is not None else None
     if provider is None and workflow is not None:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ADWs"))
         from runtime_policy import resolve_runtime
@@ -45,13 +52,14 @@ def create_run(task_id: int | None = None, *, origin_type: str = "scheduled_task
         provider = decision["primary"]
     run = RuntimeRun(
         id=str(uuid.uuid4()), task_id=task_id, origin_type=origin_type, origin_id=origin_id,
-        agent_slug=agent_slug, attempt=(prior.attempt + 1 if prior else 1),
-        requested_profile=requested_profile, resolved_profile=resolved_profile,
-        runtime_provider=provider, workflow_slug=workflow["slug"] if workflow else None,
+        ticket_id=ticket_id, goal_id=goal_id, agent_slug=agent_slug,
+        attempt=(prior.attempt + 1 if prior else 1), requested_profile=requested_profile,
+        resolved_profile=resolved_profile, runtime_provider=provider,
+        workflow_slug=workflow["slug"] if workflow else None,
         workflow_hash=workflow["sha256"] if workflow else None, correlation_id=str(uuid.uuid4()),
     )
     db.session.add(run)
-    publish("run.queued", f"run:{run.id}", run.correlation_id, {"task_id": task_id, "origin_type": origin_type, "origin_id": origin_id, "workflow": run.workflow_slug})
+    publish("run.queued", f"run:{run.id}", run.correlation_id, {"origin_type": origin_type, "origin_id": origin_id, "task_id": task_id, "workflow": run.workflow_slug})
     db.session.commit()
     return run
 

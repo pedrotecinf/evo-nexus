@@ -243,12 +243,6 @@ class ScheduledTask(db.Model):
     result_summary = db.Column(db.Text, nullable=True)
     error = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    attempt = db.Column(db.Integer, nullable=False, default=0)
-    provider = db.Column(db.String(64), nullable=True)
-    resolved_profile = db.Column(db.String(64), nullable=True)
-    workflow_policy = db.Column(db.String(100), nullable=True)
-    fallback_reason = db.Column(db.Text, nullable=True)
-    runtime_run_id = db.Column(db.String(36), nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -268,12 +262,6 @@ class ScheduledTask(db.Model):
             "result_summary": self.result_summary,
             "error": self.error,
             "created_by": self.created_by,
-            "attempt": self.attempt,
-            "provider": self.provider,
-            "resolved_profile": self.resolved_profile,
-            "workflow_policy": self.workflow_policy,
-            "fallback_reason": self.fallback_reason,
-            "runtime_run_id": self.runtime_run_id,
         }
 
 
@@ -281,11 +269,12 @@ class RuntimeRun(db.Model):
     __tablename__ = "runtime_runs"
 
     id = db.Column(db.String(36), primary_key=True)
-    # Kept for scheduled-task API compatibility; origin fields support all runtimes.
     task_id = db.Column(db.Integer, db.ForeignKey("scheduled_tasks.id"), nullable=True, index=True)
     origin_type = db.Column(db.String(32), nullable=False, default="scheduled_task", index=True)
-    origin_id = db.Column(db.String(128), nullable=True, index=True)
-    agent_slug = db.Column(db.String(100))
+    origin_id = db.Column(db.String(128), index=True)
+    ticket_id = db.Column(db.String(36), db.ForeignKey("tickets.id"), index=True)
+    goal_id = db.Column(db.Integer, db.ForeignKey("goals.id"), index=True)
+    agent_slug = db.Column(db.String(100), index=True)
     status = db.Column(db.String(32), nullable=False, default="queued", index=True)
     attempt = db.Column(db.Integer, nullable=False, default=1)
     requested_profile = db.Column(db.String(64))
@@ -304,11 +293,11 @@ class RuntimeRun(db.Model):
     def to_dict(self):
         return {
             "id": self.id, "task_id": self.task_id, "origin_type": self.origin_type,
-            "origin_id": self.origin_id, "agent_slug": self.agent_slug, "status": self.status,
-            "attempt": self.attempt, "requested_profile": self.requested_profile,
-            "resolved_profile": self.resolved_profile, "runtime_provider": self.runtime_provider,
-            "workflow_slug": self.workflow_slug, "workflow_hash": self.workflow_hash,
-            "correlation_id": self.correlation_id,
+            "origin_id": self.origin_id, "ticket_id": self.ticket_id, "goal_id": self.goal_id,
+            "agent_slug": self.agent_slug, "status": self.status, "attempt": self.attempt,
+            "requested_profile": self.requested_profile, "resolved_profile": self.resolved_profile,
+            "runtime_provider": self.runtime_provider, "workflow_slug": self.workflow_slug,
+            "workflow_hash": self.workflow_hash, "correlation_id": self.correlation_id,
             "queued_at": self.queued_at.isoformat() if self.queued_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -842,7 +831,13 @@ class GoalTask(db.Model):
 # --------------- Tickets models (Feature 1.3) ---------------
 
 TICKET_STATUSES = ("open", "in_progress", "blocked", "review", "resolved", "closed", "archived")
+TICKET_STATUS_ALIASES = {"waiting": "blocked"}
 TICKET_PRIORITIES = ("urgent", "high", "medium", "low")
+
+
+def normalize_ticket_status(status: str) -> str:
+    return TICKET_STATUS_ALIASES.get(status, status)
+
 PRIORITY_RANK = {"urgent": 4, "high": 3, "medium": 2, "low": 1}
 
 
@@ -850,7 +845,7 @@ class Ticket(db.Model):
     __tablename__ = "tickets"
     __table_args__ = (
         db.CheckConstraint(
-            "status IN ('open','in_progress','blocked','review','resolved','closed')",
+            "status IN ('open','in_progress','blocked','review','resolved','closed','archived')",
             name="ck_ticket_status",
         ),
         db.CheckConstraint(

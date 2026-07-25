@@ -279,7 +279,7 @@ with app.app_context():
                 title TEXT NOT NULL,
                 description TEXT,
                 status TEXT NOT NULL DEFAULT 'open'
-                    CHECK(status IN ('open','in_progress','blocked','review','resolved','closed')),
+                    CHECK(status IN ('open','in_progress','blocked','review','resolved','closed','archived')),
                 priority TEXT NOT NULL DEFAULT 'medium'
                     CHECK(priority IN ('urgent','high','medium','low')),
                 priority_rank INTEGER NOT NULL DEFAULT 2,
@@ -327,7 +327,12 @@ with app.app_context():
     _cur.executescript("""
         CREATE TABLE IF NOT EXISTS runtime_runs (
             id TEXT PRIMARY KEY,
-            task_id INTEGER NOT NULL,
+            task_id INTEGER,
+            origin_type TEXT NOT NULL DEFAULT 'scheduled_task',
+            origin_id TEXT,
+            ticket_id TEXT,
+            goal_id INTEGER,
+            agent_slug TEXT,
             status TEXT NOT NULL,
             attempt INTEGER NOT NULL DEFAULT 1,
             requested_profile TEXT,
@@ -431,6 +436,24 @@ with app.app_context():
     if "source_session_id" not in _ticket_cols:
         _cur.execute("ALTER TABLE tickets ADD COLUMN source_session_id TEXT")
         _conn.commit()
+    # --- Runtime run provenance migration ---
+    _runtime_run_cols = {row[1] for row in _cur.execute("PRAGMA table_info(runtime_runs)").fetchall()}
+    for _column, _definition in (
+        ("origin_type", "TEXT NOT NULL DEFAULT 'scheduled_task'"),
+        ("origin_id", "TEXT"),
+        ("ticket_id", "TEXT"),
+        ("goal_id", "INTEGER"),
+        ("agent_slug", "TEXT"),
+    ):
+        if _column not in _runtime_run_cols:
+            _cur.execute(f"ALTER TABLE runtime_runs ADD COLUMN {_column} {_definition}")
+    _cur.execute("UPDATE runtime_runs SET origin_id = CAST(task_id AS TEXT) WHERE origin_id IS NULL")
+    _cur.execute("CREATE INDEX IF NOT EXISTS idx_runtime_runs_origin ON runtime_runs(origin_type, origin_id)")
+    _cur.execute("CREATE INDEX IF NOT EXISTS idx_runtime_runs_ticket ON runtime_runs(ticket_id)")
+    _cur.execute("CREATE INDEX IF NOT EXISTS idx_runtime_runs_goal ON runtime_runs(goal_id)")
+    _conn.commit()
+    # --- End runtime run provenance migration ---
+
     # --- End source attribution migration ---
 
     # --- Thread-areas columns on tickets ---
