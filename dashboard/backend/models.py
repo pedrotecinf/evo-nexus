@@ -269,7 +269,11 @@ class RuntimeRun(db.Model):
     __tablename__ = "runtime_runs"
 
     id = db.Column(db.String(36), primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("scheduled_tasks.id"), nullable=False, index=True)
+    # Kept for scheduled-task API compatibility; origin fields support all runtimes.
+    task_id = db.Column(db.Integer, db.ForeignKey("scheduled_tasks.id"), nullable=True, index=True)
+    origin_type = db.Column(db.String(32), nullable=False, default="scheduled_task", index=True)
+    origin_id = db.Column(db.String(128), nullable=True, index=True)
+    agent_slug = db.Column(db.String(100))
     status = db.Column(db.String(32), nullable=False, default="queued", index=True)
     attempt = db.Column(db.Integer, nullable=False, default=1)
     requested_profile = db.Column(db.String(64))
@@ -287,7 +291,8 @@ class RuntimeRun(db.Model):
 
     def to_dict(self):
         return {
-            "id": self.id, "task_id": self.task_id, "status": self.status,
+            "id": self.id, "task_id": self.task_id, "origin_type": self.origin_type,
+            "origin_id": self.origin_id, "agent_slug": self.agent_slug, "status": self.status,
             "attempt": self.attempt, "requested_profile": self.requested_profile,
             "resolved_profile": self.resolved_profile, "runtime_provider": self.runtime_provider,
             "workflow_slug": self.workflow_slug, "workflow_hash": self.workflow_hash,

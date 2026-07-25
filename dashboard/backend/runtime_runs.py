@@ -23,10 +23,20 @@ TRANSITIONS = {
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 
-def create_run(task_id: int, *, requested_profile: str | None = None, resolved_profile: str | None = None, provider: str | None = None, workflow_type: str | None = None) -> RuntimeRun:
+def create_run(task_id: int | None = None, *, origin_type: str = "scheduled_task", origin_id: str | None = None, agent_slug: str | None = None, requested_profile: str | None = None, resolved_profile: str | None = None, provider: str | None = None, workflow_type: str | None = None) -> RuntimeRun:
+    if task_id is None and not origin_id:
+        raise ValueError("origin_id is required when task_id is absent")
+    origin_id = origin_id or str(task_id)
+    if task_id is not None:
+        origin_type = "scheduled_task"
+        origin_id = str(task_id)
+
+    if task_id is None:
+        prior = RuntimeRun.query.filter_by(origin_type=origin_type, origin_id=origin_id).order_by(RuntimeRun.attempt.desc()).first()
+    else:
+        prior = RuntimeRun.query.filter_by(task_id=task_id).order_by(RuntimeRun.attempt.desc()).first()
     from ecc_catalog import resolve_workflow
 
-    prior = RuntimeRun.query.filter_by(task_id=task_id).order_by(RuntimeRun.attempt.desc()).first()
     workflow = resolve_workflow(workflow_type) if workflow_type else None
     if provider is None and workflow is not None:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ADWs"))
@@ -34,13 +44,14 @@ def create_run(task_id: int, *, requested_profile: str | None = None, resolved_p
         decision = resolve_runtime(workflow["slug"], str(task_id))
         provider = decision["primary"]
     run = RuntimeRun(
-        id=str(uuid.uuid4()), task_id=task_id, attempt=(prior.attempt + 1 if prior else 1),
+        id=str(uuid.uuid4()), task_id=task_id, origin_type=origin_type, origin_id=origin_id,
+        agent_slug=agent_slug, attempt=(prior.attempt + 1 if prior else 1),
         requested_profile=requested_profile, resolved_profile=resolved_profile,
         runtime_provider=provider, workflow_slug=workflow["slug"] if workflow else None,
         workflow_hash=workflow["sha256"] if workflow else None, correlation_id=str(uuid.uuid4()),
     )
     db.session.add(run)
-    publish("run.queued", f"run:{run.id}", run.correlation_id, {"task_id": task_id, "workflow": run.workflow_slug})
+    publish("run.queued", f"run:{run.id}", run.correlation_id, {"task_id": task_id, "origin_type": origin_type, "origin_id": origin_id, "workflow": run.workflow_slug})
     db.session.commit()
     return run
 

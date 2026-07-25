@@ -349,6 +349,16 @@ with app.app_context():
         CREATE INDEX IF NOT EXISTS idx_runtime_runs_task_status ON runtime_runs(task_id, status);
     """)
     _conn.commit()
+    # --- Origin-agnostic runtime_runs migration (F9 parity) ---
+    _rr_cols = {row[1] for row in _cur.execute("PRAGMA table_info(runtime_runs)").fetchall()}
+    for _col, _type in [("origin_type", "TEXT DEFAULT 'scheduled_task'"), ("origin_id", "TEXT"), ("agent_slug", "TEXT")]:
+        if _col not in _rr_cols:
+            _cur.execute(f"ALTER TABLE runtime_runs ADD COLUMN {_col} {_type}")
+    # Backfill origin_id from task_id for existing rows
+    _cur.execute("UPDATE runtime_runs SET origin_id = CAST(task_id AS TEXT) WHERE origin_id IS NULL AND task_id IS NOT NULL")
+    _cur.execute("CREATE INDEX IF NOT EXISTS idx_runtime_runs_origin ON runtime_runs(origin_type, origin_id)")
+    _conn.commit()
+    # --- End origin-agnostic migration ---
     # --- End runtime task runs ---
 
     # --- Event bus tables ---

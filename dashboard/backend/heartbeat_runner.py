@@ -214,7 +214,44 @@ If you decide to skip, briefly explain why.
     return base_prompt
 
 
-# ── Step 7: Work — invoke Claude ──────────────────────────────────────────────
+# ── Step 7: Work — provider-aware normalized runtime ─────────────────────────
+
+def step7_invoke_runtime(
+    agent: str,
+    prompt: str,
+    max_turns: int,
+    timeout_seconds: int,
+    *,
+    heartbeat_id: str,
+    requested_profile: str | None = None,
+) -> dict:
+    """Invoke the configured provider; never select a CLI by local availability."""
+    from runtime_service import RuntimeRequest, RuntimeService
+
+    result = RuntimeService().invoke(RuntimeRequest(
+        origin_type="heartbeat",
+        origin_id=heartbeat_id,
+        agent_slug=agent,
+        prompt=prompt,
+        max_turns=max_turns,
+        timeout_seconds=timeout_seconds,
+        requested_profile=requested_profile,
+    ))
+    return {
+        "status": "success" if result.status == "succeeded" else result.status,
+        "output": result.output,
+        "error": result.error,
+        "duration_ms": result.duration_ms,
+        "tokens_in": result.tokens_in,
+        "tokens_out": result.tokens_out,
+        "cost_usd": result.cost_usd,
+        "provider": result.provider,
+        "requested_profile": result.requested_profile,
+        "resolved_profile": result.resolved_profile,
+        "exit_code": result.exit_code,
+        "fallback_from": result.fallback_from,
+    }
+
 
 def step7_invoke_claude(
     agent: str,
@@ -462,6 +499,10 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
         print(f"[heartbeat_runner] ERROR heartbeat not found: {heartbeat_id}", flush=True)
         sys.exit(1)
 
+    if not hb.get("enabled"):
+        print(f"[heartbeat_runner] heartbeat_id={heartbeat_id} is disabled, skipping", flush=True)
+        return run_id
+
     conn = _get_db()
 
     try:
@@ -569,12 +610,14 @@ def run_heartbeat(heartbeat_id: str, triggered_by: str = "manual", trigger_id: s
                     result = invoke_result
                 else:
                     # Standard Claude CLI subprocess
-                    print(f"[heartbeat_runner] step7 invoking claude agent={hb['agent']} max_turns={hb['max_turns']} timeout={hb['timeout_seconds']}s", flush=True)
-                    invoke_result = step7_invoke_claude(
+                    print(f"[heartbeat_runner] step7 invoking configured provider agent={hb['agent']} max_turns={hb['max_turns']} timeout={hb['timeout_seconds']}s", flush=True)
+                    invoke_result = step7_invoke_runtime(
                         agent=hb["agent"],
                         prompt=full_prompt,
                         max_turns=hb["max_turns"],
                         timeout_seconds=hb["timeout_seconds"],
+                        heartbeat_id=heartbeat_id,
+                        requested_profile=hb.get("hermes_profile"),
                     )
                     invoke_result["agent"] = hb["agent"]
                     invoke_result["started_at"] = started_at
