@@ -241,6 +241,10 @@ function detectCreatedTicketId(text) {
 const HERMES_REPLAY_MAX_MESSAGES = 24;
 const HERMES_REPLAY_MAX_CHARS = 12000;
 
+function formatHermesExitLog(sessionId, code, hasStderr) {
+  return `[chat-bridge] Hermes session ${sessionId} exited with code ${code}${hasStderr ? ' (stderr received)' : ''}`;
+}
+
 function buildHermesReplayContext(messages = []) {
   if (!Array.isArray(messages) || messages.length === 0) return '';
 
@@ -450,11 +454,9 @@ class ChatBridge {
       }
     });
 
-    // Hermes logs diagnostics to stderr; capture for debugging but don't stream
-    // it into the chat as assistant text.
+    let hermesStderr = false;
     hermesProcess.stderr.on('data', (data) => {
-      const txt = typeof data === 'string' ? data : data.toString('utf8');
-      if (txt.trim()) console.error(`[chat-bridge] Hermes ${sessionId} stderr: ${txt.trim().slice(0, 500)}`);
+      if (data.length) hermesStderr = true;
     });
 
     // 'close' fires after stdio streams have flushed and the process has exited
@@ -462,7 +464,7 @@ class ChatBridge {
     hermesProcess.on('close', (code) => {
       if (settled) return;
       settled = true;
-      console.log(`[chat-bridge] Hermes session ${sessionId} exited with code ${code}`);
+      console.log(formatHermesExitLog(sessionId, code, hermesStderr));
       if (onMessage) {
         onMessage({ type: 'message_stop' });
         onMessage({
@@ -1091,4 +1093,4 @@ class ChatBridge {
   }
 }
 
-module.exports = { ChatBridge, buildHermesReplayContext, HERMES_REPLAY_MAX_MESSAGES, HERMES_REPLAY_MAX_CHARS };
+module.exports = { ChatBridge, buildHermesReplayContext, formatHermesExitLog, HERMES_REPLAY_MAX_MESSAGES, HERMES_REPLAY_MAX_CHARS };
