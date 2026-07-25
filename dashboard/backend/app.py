@@ -454,6 +454,22 @@ with app.app_context():
     _conn.commit()
     # --- End runtime run provenance migration ---
 
+    # --- Scheduled task lifecycle migration ---
+    _scheduled_task_cols = {row[1] for row in _cur.execute("PRAGMA table_info(scheduled_tasks)").fetchall()}
+    for _column, _definition in (
+        ("attempt", "INTEGER NOT NULL DEFAULT 0"),
+        ("provider", "TEXT"),
+        ("resolved_profile", "TEXT"),
+        ("workflow_policy", "TEXT"),
+        ("fallback_reason", "TEXT"),
+        ("runtime_run_id", "TEXT"),
+    ):
+        if _column not in _scheduled_task_cols:
+            _cur.execute(f"ALTER TABLE scheduled_tasks ADD COLUMN {_column} {_definition}")
+    _cur.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_runtime_run ON scheduled_tasks(runtime_run_id)")
+    _conn.commit()
+    # --- End scheduled task lifecycle migration ---
+
     # --- End source attribution migration ---
 
     # --- Thread-areas columns on tickets ---
