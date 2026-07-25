@@ -54,6 +54,44 @@ def _parse_usage(json_result: dict) -> dict:
     }
 
 
+def _metric_number(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_metric_entry(entry):
+    """Return a compatible metrics entry without changing its totals."""
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    runs = max(0, int(_metric_number(entry.get("runs"))))
+    successes = max(0, int(_metric_number(entry.get("successes"))))
+    failures = max(0, int(_metric_number(entry.get("failures"))))
+    if successes + failures > runs:
+        runs = successes + failures
+    total_seconds = _metric_number(entry.get("total_duration", entry.get("total_seconds")))
+    if not total_seconds and runs:
+        total_seconds = _metric_number(entry.get("avg_seconds")) * runs
+
+    entry.update({
+        "runs": runs,
+        "successes": successes,
+        "failures": failures,
+        "total_seconds": total_seconds,
+        "total_duration": total_seconds,
+        "avg_seconds": total_seconds / runs if runs else 0,
+        "success_rate": successes / runs * 100 if runs else 0,
+        "total_cost_usd": _metric_number(entry.get("total_cost_usd")),
+        "total_input_tokens": int(_metric_number(entry.get("total_input_tokens"))),
+        "total_output_tokens": int(_metric_number(entry.get("total_output_tokens"))),
+        "total_cache_creation_tokens": int(_metric_number(entry.get("total_cache_creation_tokens"))),
+        "total_cache_read_tokens": int(_metric_number(entry.get("total_cache_read_tokens"))),
+    })
+    if not entry.get("last_agent") and entry.get("agent"):
+        entry["last_agent"] = entry["agent"]
+    return entry
+
+
 def _save_metrics(log_name, duration, returncode, agent, stdout, usage=None):
     """Save accumulated metrics per routine in metrics.json."""
     metrics_file = LOGS_DIR / "metrics.json"
@@ -68,33 +106,28 @@ def _save_metrics(log_name, duration, returncode, agent, stdout, usage=None):
             except (json.JSONDecodeError, OSError):
                 metrics = {}
 
-            if log_name not in metrics:
-                metrics[log_name] = {
-                    "runs": 0, "successes": 0, "failures": 0,
-                    "total_duration": 0, "total_cost_usd": 0,
-                    "total_input_tokens": 0, "total_output_tokens": 0,
-                    "total_cache_creation_tokens": 0, "total_cache_read_tokens": 0,
-                    "last_run": None, "last_status": None, "last_agent": None,
-                }
-
-            m = metrics[log_name]
+            m = _normalize_metric_entry(metrics.get(log_name, {}))
+            metrics[log_name] = m
             m["runs"] += 1
-            m["total_duration"] += duration
+            m["total_seconds"] += duration
+            m["total_duration"] = m["total_seconds"]
             m["last_run"] = datetime.now().isoformat()
             m["last_status"] = "success" if returncode == 0 else "failure"
             m["last_agent"] = agent or "default"
+            m.setdefault("agent", m["last_agent"])
             if returncode == 0:
                 m["successes"] += 1
             else:
                 m["failures"] += 1
 
             if usage:
-                m["total_cost_usd"] += usage.get("cost_usd", 0)
-                m["total_input_tokens"] += usage.get("input_tokens", 0)
-                m["total_output_tokens"] += usage.get("output_tokens", 0)
-                m["total_cache_creation_tokens"] += usage.get("cache_creation_tokens", 0)
-                m["total_cache_read_tokens"] += usage.get("cache_read_tokens", 0)
+                m["total_cost_usd"] += _metric_number(usage.get("cost_usd"))
+                m["total_input_tokens"] += int(_metric_number(usage.get("input_tokens")))
+                m["total_output_tokens"] += int(_metric_number(usage.get("output_tokens")))
+                m["total_cache_creation_tokens"] += int(_metric_number(usage.get("cache_creation_tokens")))
+                m["total_cache_read_tokens"] += int(_metric_number(usage.get("cache_read_tokens")))
 
+            m.update(_normalize_metric_entry(m))
             tmp_file = metrics_file.with_suffix(f".{os.getpid()}.tmp")
             tmp_file.write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
             os.replace(tmp_file, metrics_file)
@@ -383,7 +416,10 @@ def run_claude(prompt: str, log_name: str = "unnamed", timeout: int = 600, agent
 
         full_prompt = f"[agent:{agent}] {prompt}" if agent else prompt
         _log_to_file(log_name, full_prompt, result_text, stderr, process.returncode, duration, usage)
-        _save_metrics(log_name, duration, process.returncode, agent, result_text, usage)
+        try:
+            _save_metrics(log_name, duration, process.returncode, agent, result_text, usage)
+        except Exception as telemetry_error:
+            console.print(f"\r  [warning]⚠ Metrics error for {log_name}: {telemetry_error}[/warning]")
 
         if process.returncode == 0:
             cost_str = ""
@@ -518,7 +554,10 @@ def run_script(func, log_name: str = "unnamed", timeout: int = 120) -> dict:
         returncode = 0 if ok else 1
 
         _log_to_file(log_name, f"[systematic] {log_name}", summary_text, "", returncode, duration)
-        _save_metrics(log_name, duration, returncode, "system", summary_text)
+        try:
+            _save_metrics(log_name, duration, returncode, "system", summary_text)
+        except Exception as telemetry_error:
+            console.print(f"\r  [warning]⚠ Metrics error for {log_name}: {telemetry_error}[/warning]")
 
         if ok:
             console.print(f"\r  [success]✓[/success] {log_name} [dim]({duration:.1f}s | {summary_text})[/dim]")

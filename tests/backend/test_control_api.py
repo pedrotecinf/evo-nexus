@@ -38,6 +38,24 @@ def headers(**extra):
     return {"Authorization": "Bearer control-test-token", **extra}
 
 
+def test_list_control_routines_normalizes_legacy_metrics(client, monkeypatch, tmp_path):
+    import routes._helpers as helpers
+
+    metrics_path = tmp_path / "ADWs" / "logs"
+    metrics_path.mkdir(parents=True)
+    (metrics_path / "metrics.json").write_text('{"morning":{"runs":2,"successes":1,"total_seconds":30,"agent":"clawdia","total_cost_usd":1.5}}')
+    monkeypatch.setattr(helpers, "WORKSPACE", tmp_path)
+    monkeypatch.setattr(helpers, "discover_routines", lambda: {"morning": {"name": "Morning", "agent": "clawdia"}})
+
+    response = client.get("/api/control/v1/routines", headers=headers())
+
+    assert response.status_code == 200
+    routine = response.json["data"][0]
+    assert routine["runs"] == 2
+    assert routine["success_rate"] == 50
+    assert routine["total_cost_usd"] == 1.5
+
+
 def test_requires_service_token(client):
     assert client.get("/api/control/v1/health").status_code == 401
     assert client.get("/api/control/v1/health", headers={"Authorization": "Bearer invalid"}).status_code == 401

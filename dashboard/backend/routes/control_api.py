@@ -619,6 +619,7 @@ def run_control_scheduled_task(task_id: int, correlation_id: str):
 @_require("routines:read")
 def list_control_routines(correlation_id: str):
     from routes._helpers import discover_routines, WORKSPACE, safe_read
+    from routes.routines import normalize_metrics_entry
     import json as _json
     metrics_path = WORKSPACE / "ADWs" / "logs" / "metrics.json"
     metrics: dict = {}
@@ -639,10 +640,11 @@ def list_control_routines(correlation_id: str):
         }
         m = metrics.get(make_id)
         if isinstance(m, dict):
-            entry["runs"] = m.get("runs", 0)
+            m = normalize_metrics_entry(m)
+            entry["runs"] = m["runs"]
             entry["last_run"] = m.get("last_run")
-            entry["success_rate"] = m.get("success_rate", 0)
-            entry["total_cost_usd"] = m.get("total_cost_usd", 0.0)
+            entry["success_rate"] = m["success_rate"]
+            entry["total_cost_usd"] = m["total_cost_usd"]
         else:
             entry["runs"] = 0
             entry["last_run"] = None
