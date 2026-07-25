@@ -14,8 +14,9 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from models import (
-    ControlApiAuditLog, ControlApiIdempotency, GoalProject, Ticket, TicketActivity,
-    TicketComment, TICKET_PRIORITIES, TICKET_STATUSES, db,
+    ControlApiAuditLog, ControlApiIdempotency, GoalProject, Goal, GoalTask, Mission,
+    Heartbeat, HeartbeatRun, ScheduledTask, Ticket, TicketActivity, TicketComment,
+    TICKET_PRIORITIES, TICKET_STATUSES, db,
 )
 from event_bus import publish as publish_event
 
@@ -400,3 +401,213 @@ def create_evidence(ticket_id: str, correlation_id: str):
     _audit("create_evidence", f"ticket:{ticket.id}", correlation_id, "created")
     db.session.commit()
     return _response(response, status=201, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/missions")
+@_require("goals:read")
+def list_missions(correlation_id: str):
+    return _response([mission.to_dict(include_projects=True) for mission in Mission.query.order_by(Mission.id).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/projects")
+@_require("projects:read")
+def list_projects(correlation_id: str):
+    return _response([project.to_dict(include_goals=True) for project in GoalProject.query.order_by(GoalProject.id).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/goals")
+@_require("goals:read")
+def list_goals(correlation_id: str):
+    return _response([goal.to_dict(include_tasks=True) for goal in Goal.query.order_by(Goal.id).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/goal-tasks")
+@_require("goals:read")
+def list_goal_tasks(correlation_id: str):
+    return _response([task.to_dict() for task in GoalTask.query.order_by(GoalTask.id).all()], correlation_id=correlation_id)
+
+
+def _controlled_mutation(operation: str, data: dict, correlation_id: str):
+    key, request_hash, replay = _require_idempotency(operation, data, correlation_id)
+    if replay:
+        return None, replay
+    if key is None:
+        return None, request_hash
+    return (key, request_hash), None
+
+
+@bp.route("/api/control/v1/goals/<int:goal_id>", methods=["PATCH"])
+@_require("goals:write")
+def update_goal(goal_id: int, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"update_goal:{goal_id}", data, correlation_id)
+    if replay:
+        return replay
+    goal = Goal.query.get(goal_id)
+    if goal is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    allowed = {"title", "description", "target_metric", "target_value", "current_value", "due_date", "status"}
+    if not data or set(data) - allowed:
+        return _response(error="invalid_fields", status=400, correlation_id=correlation_id)
+    for key in allowed & data.keys():
+        setattr(goal, key, data[key])
+    goal.updated_at = _now()
+    response = goal.to_dict(include_tasks=True)
+    _record_idempotent(f"update_goal:{goal_id}", idem[0], idem[1], 200, response)
+    _audit("update_goal", f"goal:{goal_id}", correlation_id, "updated")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/goal-tasks/<int:task_id>", methods=["PATCH"])
+@_require("goals:write")
+def update_goal_task(task_id: int, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"update_goal_task:{task_id}", data, correlation_id)
+    if replay:
+        return replay
+    task = GoalTask.query.get(task_id)
+    if task is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    allowed = {"title", "description", "priority", "assignee_agent", "status", "due_date"}
+    if not data or set(data) - allowed:
+        return _response(error="invalid_fields", status=400, correlation_id=correlation_id)
+    for key in allowed & data.keys():
+        setattr(task, key, data[key])
+    task.updated_at = _now()
+    response = task.to_dict()
+    _record_idempotent(f"update_goal_task:{task_id}", idem[0], idem[1], 200, response)
+    _audit("update_goal_task", f"goal_task:{task_id}", correlation_id, "updated")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/heartbeats")
+@_require("heartbeats:read")
+def list_control_heartbeats(correlation_id: str):
+    return _response([heartbeat.to_dict() for heartbeat in Heartbeat.query.order_by(Heartbeat.id).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/heartbeats/<string:heartbeat_id>")
+@_require("heartbeats:read")
+def get_control_heartbeat(heartbeat_id: str, correlation_id: str):
+    heartbeat = Heartbeat.query.get(heartbeat_id)
+    if heartbeat is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    return _response(heartbeat.to_dict(), correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/heartbeats/<string:heartbeat_id>/runs/<string:run_id>")
+@_require("heartbeats:read")
+def get_control_heartbeat_run(heartbeat_id: str, run_id: str, correlation_id: str):
+    run = HeartbeatRun.query.filter_by(heartbeat_id=heartbeat_id, run_id=run_id).first()
+    if run is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    return _response(run.to_dict(), correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/heartbeats/<string:heartbeat_id>/enabled", methods=["PATCH"])
+@_require("heartbeats:write")
+def set_control_heartbeat_enabled(heartbeat_id: str, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"set_heartbeat_enabled:{heartbeat_id}", data, correlation_id)
+    if replay:
+        return replay
+    heartbeat = Heartbeat.query.get(heartbeat_id)
+    if heartbeat is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    if set(data) != {"enabled"} or not isinstance(data["enabled"], bool):
+        return _response(error="invalid_enabled", status=400, correlation_id=correlation_id)
+    heartbeat.enabled = data["enabled"]
+    response = heartbeat.to_dict()
+    _record_idempotent(f"set_heartbeat_enabled:{heartbeat_id}", idem[0], idem[1], 200, response)
+    _audit("set_heartbeat_enabled", f"heartbeat:{heartbeat_id}", correlation_id, "enabled" if heartbeat.enabled else "disabled")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/heartbeats/<string:heartbeat_id>/run", methods=["POST"])
+@_require("heartbeats:run")
+def run_control_heartbeat(heartbeat_id: str, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"run_heartbeat:{heartbeat_id}", data, correlation_id)
+    if replay:
+        return replay
+    if Heartbeat.query.get(heartbeat_id) is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    from heartbeat_dispatcher import dispatch
+    dispatched, run_id = dispatch(heartbeat_id, "manual")
+    response = {"heartbeat_id": heartbeat_id, "run_id": run_id, "status": "dispatched" if dispatched else "not_dispatched"}
+    _record_idempotent(f"run_heartbeat:{heartbeat_id}", idem[0], idem[1], 202, response)
+    _audit("run_heartbeat", f"heartbeat:{heartbeat_id}", correlation_id, response["status"])
+    db.session.commit()
+    return _response(response, status=202, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/scheduled-tasks")
+@_require("scheduled_tasks:read")
+def list_control_scheduled_tasks(correlation_id: str):
+    return _response([task.to_dict() for task in ScheduledTask.query.order_by(ScheduledTask.scheduled_at.desc()).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/scheduled-tasks/<int:task_id>")
+@_require("scheduled_tasks:read")
+def get_control_scheduled_task(task_id: int, correlation_id: str):
+    task = ScheduledTask.query.get(task_id)
+    if task is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    return _response(task.to_dict(), correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/scheduled-tasks/<int:task_id>/cancel", methods=["POST"])
+@_require("scheduled_tasks:write")
+def cancel_control_scheduled_task(task_id: int, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"cancel_scheduled_task:{task_id}", data, correlation_id)
+    if replay:
+        return replay
+    task = ScheduledTask.query.get(task_id)
+    if task is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    if task.status == "running":
+        return _response(error="cannot_cancel_running", status=409, correlation_id=correlation_id)
+    if task.status != "pending":
+        return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
+    task.status = "cancelled"
+    response = task.to_dict()
+    _record_idempotent(f"cancel_scheduled_task:{task_id}", idem[0], idem[1], 200, response)
+    _audit("cancel_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "cancelled")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/scheduled-tasks/<int:task_id>/run", methods=["POST"])
+@_require("scheduled_tasks:run")
+def run_control_scheduled_task(task_id: int, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    idem, replay = _controlled_mutation(f"run_scheduled_task:{task_id}", data, correlation_id)
+    if replay:
+        return replay
+    task = ScheduledTask.query.get(task_id)
+    if task is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    if task.status not in {"pending", "failed"}:
+        return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
+    task.status = "pending"
+    response = task.to_dict()
+    _record_idempotent(f"run_scheduled_task:{task_id}", idem[0], idem[1], 202, response)
+    _audit("run_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "queued")
+    db.session.commit()
+    return _response(response, status=202, correlation_id=correlation_id)
