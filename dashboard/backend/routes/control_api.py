@@ -17,6 +17,7 @@ from models import (
     ControlApiAuditLog, ControlApiIdempotency, GoalProject, Ticket, TicketActivity,
     TicketComment, TICKET_PRIORITIES, TICKET_STATUSES, db,
 )
+from event_bus import publish as publish_event
 
 bp = Blueprint("control_api", __name__)
 ACTOR = "service:hermes"
@@ -110,6 +111,10 @@ def _audit(operation: str, resource: str, correlation_id: str, result: str) -> N
             created_at=_now(),
         )
     )
+    publish_event(
+        "control_api.mutation", resource, correlation_id,
+        {"operation": operation, "outcome": result, "provider": "hermes", "agent": ACTOR},
+    )
 
 
 def _request_hash(data: dict) -> str:
@@ -178,6 +183,85 @@ def get_ticket(ticket_id: str, correlation_id: str):
     if ticket is None:
         return _response(error="not_found", status=404, correlation_id=correlation_id)
     return _response(_ticket_data(ticket), correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/tickets")
+@_require("tickets:read")
+def list_tickets(correlation_id: str):
+    return _response([_ticket_data(ticket) for ticket in Ticket.query.order_by(Ticket.created_at.asc()).all()], correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/tickets/<string:ticket_id>/timeline")
+@_require("tickets:read")
+def ticket_timeline(ticket_id: str, correlation_id: str):
+    ticket = Ticket.query.get(ticket_id)
+    if ticket is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    comments = [{**comment.to_dict(), "_type": "comment"} for comment in ticket.comments.order_by(TicketComment.created_at.asc()).all()]
+    activities = [{**activity.to_dict(), "_type": "activity"} for activity in ticket.activity.order_by(TicketActivity.created_at.asc()).all()]
+    timeline = sorted(comments + activities, key=lambda item: item["created_at"])
+    return _response({"timeline": timeline, "total": len(timeline)}, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/tickets/<string:ticket_id>/checkout", methods=["POST"])
+@_require("tickets:write")
+def checkout_ticket(ticket_id: str, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    key, request_hash, replay = _require_idempotency(f"checkout_ticket:{ticket_id}", data, correlation_id)
+    if replay:
+        return replay
+    if key is None:
+        return request_hash
+    ticket = Ticket.query.get(ticket_id)
+    if ticket is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    agent, validation = _string(data, "agent", 100, required=True)
+    if validation:
+        return _response(error=validation, status=400, correlation_id=correlation_id)
+    if ticket.locked_at is not None:
+        return _response(error="already_locked", status=409, correlation_id=correlation_id)
+    ticket.locked_at = _now()
+    ticket.locked_by = agent
+    ticket.lock_timeout_seconds = data.get("lock_timeout_seconds", 1800)
+    ticket.updated_at = _now()
+    db.session.add(TicketActivity(id=str(uuid.uuid4()), ticket_id=ticket.id, actor=ACTOR, action="checkout", payload=json.dumps({"agent": agent} ), created_at=_now()))
+    response = _ticket_data(ticket)
+    _record_idempotent(f"checkout_ticket:{ticket_id}", key, request_hash, 200, response)
+    _audit("checkout_ticket", f"ticket:{ticket.id}", correlation_id, "locked")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
+
+
+@bp.route("/api/control/v1/tickets/<string:ticket_id>/release", methods=["POST"])
+@_require("tickets:write")
+def release_ticket(ticket_id: str, correlation_id: str):
+    data, error = _payload()
+    if error:
+        return error
+    key, request_hash, replay = _require_idempotency(f"release_ticket:{ticket_id}", data, correlation_id)
+    if replay:
+        return replay
+    if key is None:
+        return request_hash
+    ticket = Ticket.query.get(ticket_id)
+    if ticket is None:
+        return _response(error="not_found", status=404, correlation_id=correlation_id)
+    agent, validation = _string(data, "agent", 100, required=True)
+    if validation:
+        return _response(error=validation, status=400, correlation_id=correlation_id)
+    if ticket.locked_by != agent:
+        return _response(error="not_locked_by_you", status=403, correlation_id=correlation_id)
+    ticket.locked_at = None
+    ticket.locked_by = None
+    ticket.updated_at = _now()
+    db.session.add(TicketActivity(id=str(uuid.uuid4()), ticket_id=ticket.id, actor=ACTOR, action="release", payload=json.dumps({"agent": agent}), created_at=_now()))
+    response = _ticket_data(ticket)
+    _record_idempotent(f"release_ticket:{ticket_id}", key, request_hash, 200, response)
+    _audit("release_ticket", f"ticket:{ticket.id}", correlation_id, "released")
+    db.session.commit()
+    return _response(response, correlation_id=correlation_id)
 
 
 @bp.route("/api/control/v1/tickets", methods=["POST"])

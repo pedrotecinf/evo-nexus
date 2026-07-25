@@ -69,6 +69,23 @@ def test_mutations_require_idempotency_key(client):
     assert client.post(f"/api/control/v1/tickets/{ticket_id}/evidence", headers=headers(), json={"evidence": "run-123"}).status_code == 400
 
 
+def test_ticket_timeline_checkout_release_and_conflict(client):
+    created = client.post("/api/control/v1/tickets", headers=headers(**{"Idempotency-Key": "ticket-lock"}), json={"title": "Task"})
+    ticket_id = created.json["data"]["id"]
+    assert client.get(f"/api/control/v1/tickets/{ticket_id}/timeline", headers=headers()).status_code == 200
+
+    lock_headers = headers(**{"Idempotency-Key": "lock-1", "X-Correlation-ID": "lock-correlation"})
+    locked = client.post(f"/api/control/v1/tickets/{ticket_id}/checkout", headers=lock_headers, json={"agent": "zara-cs"})
+    replayed = client.post(f"/api/control/v1/tickets/{ticket_id}/checkout", headers=lock_headers, json={"agent": "zara-cs"})
+    assert locked.status_code == replayed.status_code == 200
+    assert locked.json["data"]["locked_by"] == "zara-cs"
+    assert client.post(f"/api/control/v1/tickets/{ticket_id}/checkout", headers=headers(**{"Idempotency-Key": "lock-2"}), json={"agent": "atlas-project"}).status_code == 409
+    assert client.post(f"/api/control/v1/tickets/{ticket_id}/release", headers=headers(**{"Idempotency-Key": "release-wrong"}), json={"agent": "atlas-project"}).status_code == 403
+    released = client.post(f"/api/control/v1/tickets/{ticket_id}/release", headers=headers(**{"Idempotency-Key": "release-1"}), json={"agent": "zara-cs"})
+    assert released.status_code == 200
+    assert released.json["data"]["locked_by"] is None
+
+
 def test_comments_evidence_and_validation(client):
     created = client.post("/api/control/v1/tickets", headers=headers(**{"Idempotency-Key": "ticket-1"}), json={"title": "Task"})
     ticket_id = created.json["data"]["id"]

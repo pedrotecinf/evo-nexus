@@ -740,6 +740,7 @@ class TerminalServer {
                 workingDir: chatSession.workingDir,
                 prompt: data.prompt,
                 files: data.files,
+                history: chatSession.chatHistory.slice(0, -1),
                 sdkSessionId: chatSession.sdkSessionId || undefined,
                 systemPromptExtras: chatSession.systemPromptExtras || undefined,
                 onMessage: (msg) => {
