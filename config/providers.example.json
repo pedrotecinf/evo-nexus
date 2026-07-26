@@ -13,8 +13,8 @@
       "description": "Hermes Agent — agente AI multi-provedor (OpenRouter, Anthropic, OpenAI, DeepSeek, etc.)",
       "cli_command": "hermes",
       "env_vars": {
-        "HERMES_PROVIDER": "",
         "HERMES_MODEL": "",
+        "HERMES_MAX_ITERATIONS": "",
         "OPENROUTER_API_KEY": "",
         "ANTHROPIC_API_KEY": "",
         "DEEPSEEK_API_KEY": ""
@@ -51,9 +51,9 @@
           "OPENAI_MODEL": ""
         },
         "hermes": {
-          "HERMES_PROVIDER": "",
           "HERMES_MODEL": "",
-          "HERMES_API_KEY": ""
+          "OPENAI_BASE_URL": "",
+          "OPENAI_API_KEY": ""
         }
       },
       "env_vars": {

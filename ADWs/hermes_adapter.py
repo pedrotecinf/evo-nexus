@@ -5,7 +5,7 @@ Hermes CLI adapter — wraps Hermes chat to be compatible with Claude Code/openc
 This adapter accepts the same CLI flags as Claude Code:
 - --print (hermes uses -q/--query which prints result)
 - --output-format json (hermes chat returns JSON when available)
-- --max-turns N (hermes uses -m or AGENT_MAX_TURNS config)
+- --max-turns N (mapped to Hermes' HERMES_MAX_ITERATIONS setting)
 - --agent NAME (hermes uses --skills or profiles)
 - prompt as positional argument
 
@@ -64,9 +64,8 @@ def main():
     # Map flags to Hermes equivalents
     if args.max_turns:
         # Hermes uses max_turns from config or CLI if supported
-        # We'll pass via environment variable for now
         env = os.environ.copy()
-        env["AGENT_MAX_TURNS"] = str(args.max_turns)
+        env["HERMES_MAX_ITERATIONS"] = str(args.max_turns)
     else:
         env = os.environ.copy()
 

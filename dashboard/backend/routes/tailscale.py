@@ -5,13 +5,26 @@ import os
 import re
 import subprocess
 from flask import Blueprint, jsonify, request, abort
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 log = logging.getLogger(__name__)
 bp = Blueprint("tailscale", __name__)
 
 _TAILSCALE_BINARY = "/usr/bin/tailscale"
 _AUTH_KEY_RE = re.compile(r"^tskey-auth-[a-zA-Z0-9_-]+$")
+_HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$")
+_AUTH_KEY_IN_TEXT_RE = re.compile(r"tskey-auth-[a-zA-Z0-9_-]+")
+
+
+def _require_manage() -> None:
+    from models import has_permission
+
+    if not has_permission(current_user.role, "config", "manage"):
+        abort(403)
+
+
+def _safe_error(detail: str) -> str:
+    return _AUTH_KEY_IN_TEXT_RE.sub("[REDACTED]", detail).strip()[:500]
 
 
 def _tailscale(*args, timeout=15) -> subprocess.CompletedProcess:
@@ -35,6 +48,8 @@ def _get_status() -> dict:
         import json
 
         data = json.loads(result.stdout)
+        if data.get("BackendState") != "Running":
+            return {"connected": False}
         # Find the current node (Self)
         self_node = data.get("Self", {})
         return {
@@ -54,8 +69,9 @@ def _get_status() -> dict:
 
 
 @bp.route("/api/tailscale/status")
+@login_required
 def tailscale_status():
-    """Return current Tailscale connection status. Public (no login needed)."""
+    """Return the current Tailscale connection status."""
     return jsonify(_get_status())
 
 
@@ -66,6 +82,7 @@ def tailscale_connect():
 
     Body: {auth_key: str}
     """
+    _require_manage()
     data = request.get_json(silent=True) or {}
     auth_key = (data.get("auth_key") or "").strip()
 
@@ -74,6 +91,10 @@ def tailscale_connect():
 
     if not _AUTH_KEY_RE.match(auth_key):
         abort(400, description="auth_key must start with 'tskey-auth-'")
+
+    hostname = os.environ.get("EVONEXUS_TAILSCALE_HOSTNAME", "evonexus-hermes").strip()
+    if not _HOSTNAME_RE.fullmatch(hostname):
+        abort(500, description="EVONEXUS_TAILSCALE_HOSTNAME is invalid")
 
     # Check if already connected
     current = _get_status()
@@ -88,18 +109,22 @@ def tailscale_connect():
         "up",
         "--authkey=" + auth_key,
         "--accept-dns",
-        "--hostname=hermes",
+        "--hostname=" + hostname,
         "--reset",
     )
 
     if result.returncode != 0:
-        log.error("tailscale up failed: %s", result.stderr)
-        abort(502, description=f"Tailscale connection failed: {result.stderr.strip()}")
+        log.error("tailscale up failed: %s", _safe_error(result.stderr))
+        abort(502, description="Tailscale connection failed")
 
     # Verify connection
     new_status = _get_status()
     if not new_status.get("connected"):
         abort(502, description="Connection command succeeded but Tailscale is not connected")
+
+    from models import audit
+
+    audit(current_user, "tailscale.connect", resource="integrations", detail=f"hostname={hostname}")
 
     return jsonify(
         {
@@ -114,14 +139,19 @@ def tailscale_connect():
 @login_required
 def tailscale_disconnect():
     """Disconnect from Tailscale."""
+    _require_manage()
     current = _get_status()
     if not current.get("connected"):
         return jsonify({"connected": False})
 
-    result = _tailscale("down", "--accept-routes")
+    result = _tailscale("down")
     if result.returncode != 0:
-        log.error("tailscale down failed: %s", result.stderr)
-        abort(502, description=f"Tailscale disconnect failed: {result.stderr.strip()}")
+        log.error("tailscale down failed: %s", _safe_error(result.stderr))
+        abort(502, description="Tailscale disconnect failed")
+
+    from models import audit
+
+    audit(current_user, "tailscale.disconnect", resource="integrations")
 
     return jsonify({"connected": False})
 

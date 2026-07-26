@@ -174,7 +174,7 @@ def _build_llm_cmd(cli_bin: str, prompt: str) -> tuple[list[str], dict[str, str]
     """Build subprocess command for Claude/OpenClaude/Hermes semantic scans."""
     env = os.environ.copy()
     if cli_bin == "hermes":
-        env["AGENT_MAX_TURNS"] = str(_LLM_MAX_TURNS)
+        env["HERMES_MAX_ITERATIONS"] = str(_LLM_MAX_TURNS)
         env["TERM"] = "dumb"
         return ["hermes", "chat", "-Q", "-q", prompt], env
 
@@ -193,7 +193,7 @@ def _invoke_llm_scan(staged_path: Path, candidates: list[Path]) -> LLMResult:
 
     Preserves existing Claude behavior and falls back through openclaude/hermes
     when Claude Code is not installed. Hermes uses `hermes chat -Q -q` and
-    AGENT_MAX_TURNS because it does not implement Claude's compatibility flags.
+    HERMES_MAX_ITERATIONS because it does not implement Claude's compatibility flags.
     """
     if not candidates:
         return LLMResult(verdict="APPROVE", degraded=False)

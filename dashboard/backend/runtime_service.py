@@ -77,7 +77,7 @@ class RuntimeService:
         if cli == "hermes" or provider == "hermes":
             if not profile:
                 raise RuntimeError("Hermes invocation requires a resolved profile")
-            env["AGENT_MAX_TURNS"] = str(request.max_turns)
+            env["HERMES_MAX_ITERATIONS"] = str(request.max_turns)
             return [cli, "-p", profile, "chat", "-Q", "-q", request.prompt], env
         return [cli, "--print", "--max-turns", str(request.max_turns), "--dangerously-skip-permissions", "--output-format", "json", request.prompt], env
 

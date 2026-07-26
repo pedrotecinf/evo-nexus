@@ -119,7 +119,6 @@ def _create_fallback_provider_config():
                 "name": "Hermes Agent (broken)",
                 "cli_command": "hermes",
                 "env_vars": {
-                    "HERMES_PROVIDER": "nonexistent-provider-xyz",
                     "HERMES_MODEL": "fake/model-404",
                 },
             },

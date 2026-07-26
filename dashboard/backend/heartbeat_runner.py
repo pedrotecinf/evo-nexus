@@ -340,7 +340,7 @@ def step7_invoke_claude(
         ]
         if max_turns:
             env = os.environ.copy()
-            env["AGENT_MAX_TURNS"] = str(max_turns)
+            env["HERMES_MAX_ITERATIONS"] = str(max_turns)
         else:
             env = os.environ.copy()
     else:

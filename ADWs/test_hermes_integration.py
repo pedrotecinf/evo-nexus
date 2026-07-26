@@ -77,11 +77,9 @@ def test_env_vars_allowed():
     content = providers_route.read_text()
 
     hermes_env_vars = [
-        "HERMES_PROVIDER",
         "HERMES_MODEL",
-        "HERMES_API_KEY",
+        "HERMES_MAX_ITERATIONS",
         "OPENROUTER_API_KEY",
-        "AGENT_MAX_TURNS",
     ]
 
     for var in hermes_env_vars:
