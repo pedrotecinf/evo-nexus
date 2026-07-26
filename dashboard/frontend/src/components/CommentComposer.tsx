@@ -17,20 +17,13 @@ export default function CommentComposer({ assignee, submitting, onSubmit }: Prop
   const [agentError, setAgentError] = useState(false)
   const [index, setIndex] = useState(0)
   const options = useMemo(() => context && agents ? filterMentionAgents(agents, context.query, assignee) : [], [agents, assignee, context])
-  const selected = options[index]
+  const safeIndex = options.length === 0 ? 0 : Math.min(index, options.length - 1)
+  const selected = options[safeIndex]
 
   useEffect(() => {
     if (!context || agents !== null || agentError) return
     api.get('/agents').then((items: MentionAgent[]) => setAgents(items)).catch(() => setAgentError(true))
   }, [agentError, agents, context])
-
-  useEffect(() => {
-    setIndex(current => options.length === 0 ? 0 : Math.min(current, options.length - 1))
-  }, [options.length, context?.start, context?.query])
-
-  useEffect(() => {
-    if (context) setIndex(0)
-  }, [context?.start, context?.query])
 
   const updateContext = (value: string, caret: number) => {
     setBody(value)
@@ -54,7 +47,7 @@ export default function CommentComposer({ assignee, submitting, onSubmit }: Prop
     if (event.key === 'Escape') { event.preventDefault(); setContext(null); return }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      if (options.length) setIndex(current => (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
+      if (options.length) setIndex((safeIndex + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
       return
     }
     if ((event.key === 'Enter' || event.key === 'Tab') && selected) { event.preventDefault(); select(selected) }
@@ -72,8 +65,8 @@ export default function CommentComposer({ assignee, submitting, onSubmit }: Prop
 
   return <form onSubmit={submit}>
     <div className="relative">
-      <textarea ref={textareaRef} role="combobox" aria-autocomplete="list" aria-expanded={!!context} aria-controls="mention-suggestions" aria-activedescendant={selected ? `mention-suggestions-${index}` : undefined} className="w-full bg-[#0C111D] border border-[#21262d] rounded-lg px-3 py-2 text-sm text-[#e6edf3] placeholder-[#667085] focus:outline-none focus:border-[#00FFA7]/50 resize-none transition-colors" placeholder="Add a comment... Use @agent-slug to mention an agent" rows={3} value={body} onChange={event => updateContext(event.target.value, event.target.selectionStart ?? event.target.value.length)} onClick={event => setContext(findMentionContext(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length))} onKeyDown={keyDown} onBlur={event => requestAnimationFrame(() => { if (document.activeElement !== event.currentTarget) setContext(null) })} />
-      <MentionAutocomplete agents={agents} error={agentError} context={context} assignee={assignee} selectedIndex={index} onSelect={select} onSelectedIndexChange={setIndex} anchorRef={textareaRef} listboxId="mention-suggestions" />
+      <textarea ref={textareaRef} role="combobox" aria-autocomplete="list" aria-expanded={!!context} aria-controls="mention-suggestions" aria-activedescendant={selected ? `mention-suggestions-${safeIndex}` : undefined} className="w-full bg-[#0C111D] border border-[#21262d] rounded-lg px-3 py-2 text-sm text-[#e6edf3] placeholder-[#667085] focus:outline-none focus:border-[#00FFA7]/50 resize-none transition-colors" placeholder="Add a comment... Use @agent-slug to mention an agent" rows={3} value={body} onChange={event => updateContext(event.target.value, event.target.selectionStart ?? event.target.value.length)} onClick={event => { setIndex(0); setContext(findMentionContext(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)) }} onKeyDown={keyDown} onBlur={event => requestAnimationFrame(() => { if (document.activeElement !== event.currentTarget) setContext(null) })} />
+      <MentionAutocomplete agents={agents} error={agentError} context={context} assignee={assignee} selectedIndex={safeIndex} onSelect={select} onSelectedIndexChange={setIndex} anchorRef={textareaRef} listboxId="mention-suggestions" />
     </div>
     <div className="flex items-center justify-between mt-3">
       <p className="text-[10px] text-[#667085]">Tip: @mention an agent to wake their heartbeat</p>

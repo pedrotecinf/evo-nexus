@@ -13,7 +13,7 @@ const agents = [
   { name: 'vault-security', description: 'Segurança', locked: true },
 ]
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => vi.resetAllMocks())
 
 describe('CommentComposer', () => {
   it('busca agentes lazy, navega Up/Down, insere por Enter/Tab e preserva suffix/foco/caret', async () => {
@@ -32,6 +32,16 @@ describe('CommentComposer', () => {
     await waitFor(() => expect(textarea.value).toBe('Antes @zara-cs depois'))
     await waitFor(() => expect(document.activeElement).toBe(textarea))
     expect(textarea.selectionStart).toBe(14)
+  })
+
+  it('seleciona explicitamente a opção ativa com Enter', async () => {
+    getAgents.mockResolvedValue(agents)
+    render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
+    const textarea = screen.getByRole('combobox') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } })
+    await screen.findByRole('option', { name: /@atlas-project/i })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await waitFor(() => expect(textarea.value).toBe('@atlas-project'))
   })
 
   it('fecha em Escape, mantém ARIA válida e aceita clique após blur', async () => {
