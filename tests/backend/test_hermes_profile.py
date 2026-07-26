@@ -136,10 +136,6 @@ def app(tmp_path, monkeypatch):
     import hermes_profiles as _hp
     import routes.hermes_profiles_routes as _routes
 
-    importlib.reload(_models)
-    importlib.reload(_hp)
-    importlib.reload(_routes)
-
     # Point the registry at a temp profiles dir with a known config.
     cfg = _fake_config(tmp_path)
     cfg_path = tmp_path / "hermes_profiles.json"
