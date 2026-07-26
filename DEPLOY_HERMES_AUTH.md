@@ -1,57 +1,60 @@
-# 🚀 Plano de Deployment Hermes Auth (Opção B)
+# Hermes remote access over Tailscale
 
-## 📌 Contexto
-- **Objetivo**: Hermes Desktop remoto via Tailscale (com Basic Auth) mantendo o iframe evo-nexus funcional (sem auth).
-- **Branch**: `feature/hermes-runtime`
-- **Ambiente**: Produção/Staging (via Dokploy).
+This guide exposes the standalone Hermes dashboard only inside a Tailscale tailnet while preserving EvoNexus' authenticated iframe proxy.
 
-## 🛠️ Passo a Passo (Server/SSH/Dokploy)
+## Security model
 
-### 1. Atualizar `.env` do Container/Docker Compose
-Certifique-se de que as variáveis de ambiente necessárias estejam configuradas no service `evonexus` do seu ambiente (no Dokploy na aba Environment ou diretamente no servidor no arquivo `.env` do diretório do docker-compose):
+- The embedded EvoNexus iframe continues to use the server-side proxy and the normal EvoNexus login/RBAC boundary.
+- Direct access to Hermes on port `9119` is available only when both `EVONEXUS_HERMES_USERNAME` and `EVONEXUS_HERMES_PASSWORD` are configured.
+- Without both credentials, Hermes binds to `127.0.0.1`; direct remote access is unavailable.
+- Tailscale connect/disconnect actions require EvoNexus `config:manage` permission and are written to the audit log.
+- The Tailscale auth key is submitted transiently through the Integrations UI. EvoNexus does not persist it or return it in logs/errors.
+
+## Environment
 
 ```env
-# ── Hermes Dashboard Auth (remote access via Tailscale) ──
 EVONEXUS_HERMES_USERNAME=hermes-admin
-EVONEXUS_HERMES_PASSWORD=<sua-senha-segura-aqui>
+EVONEXUS_HERMES_PASSWORD=<strong-plaintext-password>
+
+# Optional; defaults to evonexus-hermes.
+EVONEXUS_TAILSCALE_HOSTNAME=evonexus-hermes
 ```
 
-### 2. Recriar/Reiniciar Container
-- Se as alterações de código forem carregadas na build, realize o deploy normalmente (ex: via Git webhook no Dokploy, ou rodando `make rebuild` + `docker compose up -d`).
-- Se as pastas forem volumes locais, um simples reinício (`docker compose restart` ou "Restart" no Dokploy) fará as mudanças do `start-dashboard.sh` entrarem em vigor.
+`EVONEXUS_HERMES_PASSWORD` is a strong plaintext secret consumed by Hermes' Basic Auth integration; do not pre-hash it. Store it in the deployment platform's secret manager and never commit it.
 
-### 3. Expor Porta 9119 (Apenas no Dokploy)
-O Tailscale irá acessar o Hermes na porta 9119, logo ela precisa estar aberta (bindada no host).
-- Vá no Dokploy UI -> Project -> Application -> `evonexus`.
-- Vá na aba **Ports**.
-- Adicione: `9119:9119/tcp`
-- Salve e de Deploy (isso recria o container com o mapping atualizado).
+The native Hermes API server is separate from the dashboard and is disabled by default. Enable it only when required:
 
----
+```env
+EVONEXUS_HERMES_API_ENABLED=true
+EVONEXUS_HERMES_API_KEY=<independent-high-entropy-key>
+```
 
-## ✅ Testes de Aceitação Remotos (TST-1 a TST-5)
+Startup fails closed when the API server is enabled without a key.
 
-### TST-1 e TST-2: IFrame local continua funcionando
-1. Acesse o **evo-nexus** normalmente pelo seu browser (`https://evo-nexus.domain.com/` ou localhost).
-2. Vá até a aba "Terminal" ou "Hermes".
-3. Valide:
-   - A interface do Hermes abre **sem pedir usuário/senha** na tela.
-   - O chat do terminal conecta via **WebSocket** e responde comandos.
+## Deployment
 
-### TST-3: Bloqueio Desktop Remoto (Tailscale)
-1. Certifique-se de estar conectado à sua Tailnet no seu PC ou celular.
-2. Descubra o IP ou MagicDNS do servidor da EvoNexus (ex: `100.x.y.z` ou `evo-nexus.tail-xxx.ts.net`).
-3. Abra uma guia **Anônima** do navegador e acesse: `http://<tailscale-ip-ou-dns>:9119/`
-4. Valide:
-   - O browser deve exibir um pop-up nativo solicitando **Username** e **Password**.
-   - Se cancelar, a tela do Hermes original mostrará um alerta vermelho.
+1. Configure the environment variables in the dashboard service.
+2. Deploy an immutable image tag with `EVONEXUS_IMAGE_TAG=sha-<revision>`.
+3. Preserve the `/var/lib/tailscale` volume so the node identity survives restarts.
+4. Open EvoNexus, navigate to **Integrations → Network**, and submit an ephemeral/reusable Tailscale auth key according to your tailnet policy.
+5. Do not publish port `9119` to the public internet. Reach it through the Tailscale IP or MagicDNS name.
 
-### TST-4 e TST-5: Sucesso Desktop Remoto
-1. No pop-up de login, insira:
-   - **User**: _Valor de `EVONEXUS_HERMES_USERNAME` (padrão: `hermes-admin`)_
-   - **Pass**: _Sua senha definida_
-2. Valide:
-   - A interface do Hermes UI carrega completamente e com sucesso (Código 200 OK).
-   - Abra a gaveta de navegação lateral dentro do Hermes Desktop independente e tente mandar uma mensagem para testar o **WebSocket**. Ele não deve exibir erros de desconexão.
+The Swarm dashboard image starts `tailscaled` in userspace-networking mode. Non-Swarm/custom images must provide a compatible `tailscale` CLI and daemon/socket.
 
-> 📢 **Se algo falhar:** Remova as variáveis `EVONEXUS_HERMES_USERNAME` e `EVONEXUS_HERMES_PASSWORD` e reinicie. O fallback nativo volta o Hermes para o `127.0.0.1` isolado.
+## Acceptance checks
+
+1. Log in to EvoNexus and confirm the embedded Hermes UI and WebSocket chat work without a second login prompt.
+2. Confirm an unauthenticated request to `/api/tailscale/status` returns `401`.
+3. Confirm a non-admin role without `config:manage` receives `403` for connect/disconnect.
+4. From a device on the tailnet, open `http://<tailscale-ip-or-magicdns>:9119/` in a private browser window.
+5. Confirm Hermes requires the configured Basic Auth credentials and WebSocket chat remains connected after login.
+6. Confirm direct access is unavailable after removing both Hermes auth variables and redeploying.
+7. Confirm the EvoNexus audit log records successful Tailscale connect/disconnect actions without an auth key.
+
+## Rollback
+
+1. Remove `EVONEXUS_HERMES_USERNAME` and `EVONEXUS_HERMES_PASSWORD` to return Hermes to loopback-only binding.
+2. Disconnect the node from **Integrations → Network** if tailnet access is no longer required.
+3. Redeploy the previous immutable `sha-*` image tag if application rollback is necessary.
+
+Do not delete the Tailscale state volume unless intentionally decommissioning the node identity.

@@ -15,6 +15,9 @@ Validates all acceptance criteria from the hermes-runtime-adapter plan:
 Run with: .venv/bin/python ADWs/test_hermes_e2e.py
 """
 
+# Executable validation harness; do not collect it as a pytest module.
+__test__ = False
+
 import json
 import os
 import re

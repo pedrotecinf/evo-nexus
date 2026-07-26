@@ -2,9 +2,10 @@
 
 Hermes Agent runs a web UI on port 9119. This proxy makes it accessible
 through the dashboard on /hermes-ui/*, protected by @login_required.
-Port 9119 is never exposed externally — only reachable via this proxy,
-so the dashboard's own login is the single gate (run Hermes with
-HERMES_DASHBOARD_INSECURE=1 — its own auth is redundant behind this proxy).
+By default Hermes binds to loopback and the dashboard login is the only
+external gate. When Tailscale access is enabled with EvoNexus-managed Basic
+Auth credentials, the proxy authenticates to Hermes server-side so the
+embedded UI remains seamless without weakening direct-access protection.
 
 The Hermes UI serves assets at /assets/* and talks to its backend over
 both HTTP (/api/*) and WebSocket (/api/pty, /api/ws, /api/events). Behind

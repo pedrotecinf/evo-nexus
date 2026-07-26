@@ -1,12 +1,10 @@
-"""Allowlisted ECC workflow catalog."""
+"""Self-contained allowlisted ECC workflow catalog."""
 
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+import json
 
-ROOT = Path(__file__).resolve().parents[2] / ".ecc" / "commands"
-MAX_WORKFLOW_BYTES = 128 * 1024
 TASK_WORKFLOWS = {
     "bug": "orch-fix-defect",
     "feature": "orch-add-feature",
@@ -16,15 +14,32 @@ TASK_WORKFLOWS = {
     "research": "orch-review",
 }
 
+WORKFLOW_CATALOG = {
+    "orch-fix-defect": {"version": 1, "risk": "standard"},
+    "orch-add-feature": {"version": 1, "risk": "standard"},
+    "orch-refine-code": {"version": 1, "risk": "standard"},
+    "orch-review": {"version": 1, "risk": "standard"},
+}
+
 
 def resolve_workflow(task_type: str, override: str | None = None) -> dict:
+    """Resolve an allowlisted workflow without relying on host-only files."""
     slug = override or TASK_WORKFLOWS.get(task_type)
-    if slug not in set(TASK_WORKFLOWS.values()):
+    if not slug:
         raise ValueError("Workflow is not allowlisted")
-    path = (ROOT / f"{slug}.md").resolve()
-    if path.parent != ROOT.resolve() or path.is_symlink() or not path.is_file():
-        raise ValueError("Workflow source is invalid")
-    content = path.read_bytes()
-    if len(content) > MAX_WORKFLOW_BYTES:
-        raise ValueError("Workflow source exceeds size limit")
-    return {"slug": slug, "sha256": hashlib.sha256(content).hexdigest(), "risk": "high" if task_type == "security" else "standard"}
+    definition = WORKFLOW_CATALOG.get(slug)
+    if definition is None:
+        raise ValueError("Workflow is not allowlisted")
+
+    risk = "high" if task_type == "security" else definition["risk"]
+    canonical = json.dumps(
+        {"slug": slug, "version": definition["version"], "risk": risk},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return {
+        "slug": slug,
+        "version": definition["version"],
+        "sha256": hashlib.sha256(canonical).hexdigest(),
+        "risk": risk,
+    }

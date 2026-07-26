@@ -20,6 +20,7 @@ set -euo pipefail
 TERMINAL_PORT="${TERMINAL_SERVER_PORT:-32352}"
 FLASK_PORT="${EVONEXUS_PORT:-8080}"
 HERMES_UI_PORT="${HERMES_UI_PORT:-9119}"
+HERMES_API_PORT="${HERMES_API_PORT:-8642}"
 
 echo "[start-dashboard] terminal-server on :${TERMINAL_PORT}, Flask on :${FLASK_PORT}"
 
@@ -155,10 +156,15 @@ if command -v hermes &>/dev/null; then
     export HERMES_DASHBOARD=1
     export HERMES_DASHBOARD_HOST="${HERMES_DASHBOARD_HOST}"
     export HERMES_DASHBOARD_PORT="${HERMES_UI_PORT}"
-    export API_SERVER_ENABLED="${EVONEXUS_HERMES_API_ENABLED:-true}"
+    HERMES_API_ENABLED="${EVONEXUS_HERMES_API_ENABLED:-false}"
+    if [ "${HERMES_API_ENABLED}" = "true" ] && [ -z "${EVONEXUS_HERMES_API_KEY:-}" ]; then
+        echo "[start-dashboard] EVONEXUS_HERMES_API_KEY is required when EVONEXUS_HERMES_API_ENABLED=true" >&2
+        exit 1
+    fi
+    export API_SERVER_ENABLED="${HERMES_API_ENABLED}"
     export API_SERVER_HOST=127.0.0.1
     export API_SERVER_PORT="${HERMES_API_PORT}"
-    [ -n "${EVONEXUS_HERMES_API_KEY:-}" ] && export API_SERVER_KEY="${EVONEXUS_HERMES_API_KEY}"
+    [ "${HERMES_API_ENABLED}" = "true" ] && export API_SERVER_KEY="${EVONEXUS_HERMES_API_KEY}"
 
     echo "[start-dashboard] starting Hermes dashboard on :${HERMES_UI_PORT} (host=${HERMES_DASHBOARD_HOST})"
     (hermes dashboard --port "${HERMES_UI_PORT}" --host "${HERMES_DASHBOARD_HOST}" --no-open || echo "[start-dashboard] hermes dashboard exited with code $?") &

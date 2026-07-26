@@ -183,6 +183,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
+    for index_name in (
+        "ix_scheduled_tasks_runtime_run_id",
+        "ix_scheduled_tasks_ticket_id",
+    ):
+        if _has_index(conn, "scheduled_tasks", index_name):
+            op.drop_index(index_name, table_name="scheduled_tasks")
+
     for table in (
         "control_api_audit_log",
         "control_api_idempotency",

@@ -54,3 +54,18 @@ def test_publish_workflow_does_not_publish_latest():
     workflow = (ROOT / ".github/workflows/docker-publish.yml").read_text()
     assert "latest=" not in workflow
     assert "type=sha,prefix=sha-,format=short" in workflow
+
+
+def test_optional_hermes_api_server_is_disabled_by_default_and_requires_a_key():
+    script = (ROOT / "start-dashboard.sh").read_text()
+
+    assert "${EVONEXUS_HERMES_API_ENABLED:-false}" in script
+    assert '-z "${EVONEXUS_HERMES_API_KEY:-}"' in script
+    assert 'HERMES_API_PORT="${HERMES_API_PORT:-8642}"' in script
+
+
+def test_dashboard_images_include_the_local_ui_package_before_frontend_install():
+    for dockerfile in ("Dockerfile.dashboard", "Dockerfile.swarm.dashboard", "Dockerfile.dev"):
+        text = (ROOT / dockerfile).read_text()
+        assert "WORKDIR /dashboard/frontend" in text
+        assert "COPY dashboard/packages/ui /dashboard/packages/ui" in text

@@ -15,6 +15,7 @@ def test_ecc_catalog_allowlist():
     from ecc_catalog import resolve_workflow
     workflow = resolve_workflow("bug")
     assert workflow["slug"] == "orch-fix-defect"
+    assert workflow["version"] == 1
     assert len(workflow["sha256"]) == 64
     with pytest.raises(ValueError):
         resolve_workflow("bug", "../../etc/passwd")

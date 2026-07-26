@@ -5,6 +5,9 @@ Test Hermes Runtime Integration
 This script validates that Hermes is properly integrated with EvoNexus ADWs.
 """
 
+# Executable validation harness; do not collect it as a pytest module.
+__test__ = False
+
 import json
 import os
 import subprocess

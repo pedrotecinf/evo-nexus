@@ -23,7 +23,7 @@ version: "3.7"
 services:
 
   evonexus_dashboard:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-dashboard:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-dashboard:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
 
     healthcheck:
       test: ["CMD-SHELL", "command -v claude && command -v hermes && curl -fsS http://localhost:${EVONEXUS_PORT:-8080}/api/version"]
@@ -92,7 +92,7 @@ services:
         - traefik.http.services.evonexus_terminal.loadbalancer.passHostHeader=true
 
   evonexus_telegram:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
     command:
       - "claude"
       - "--channels"
@@ -132,7 +132,7 @@ services:
           memory: 1024M
 
   evonexus_scheduler:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
     command: ["uv", "run", "python", "scheduler.py"]
     healthcheck:
       test: ["CMD-SHELL", "command -v claude && command -v hermes"]

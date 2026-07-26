@@ -75,9 +75,9 @@ long-running service. External REST APIs do not.
   resolver called `letsencryptresolver` (rename in the stack labels if
   your resolver has a different name).
 - A DNS A record pointing `evonexus.<yourdomain>` to the Swarm ingress.
-- Docker images are pulled from GHCR at
-  `ghcr.io/pedrotecinf/evo-nexus-{dashboard,runtime}`, published pelo
-  workflow GitHub Actions com tags imutáveis `sha-<revision>`.
+- Docker images are pulled from Docker Hub at
+  `evoapicloud/evo-nexus-{dashboard,runtime}` and are published by the
+  GitHub Actions workflow with immutable `sha-<revision>` tags.
 - As imagens públicas não exigem `docker login` nos managers do Swarm.
   Defina `EVONEXUS_IMAGE_REGISTRY` apenas ao usar outro registry.
 

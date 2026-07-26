@@ -34,7 +34,7 @@ services:
   # Portas expostas apenas dentro da rede Docker; o reverse proxy é quem
   # publica para o mundo externo.
   dashboard:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-dashboard:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-dashboard:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
     container_name: evonexus-dashboard
     expose:
       - "8080"    # Dashboard (UI + API)
@@ -62,7 +62,7 @@ services:
   # Telegram — bot que escuta mensagens e delega para agentes.
   # Opcional: remova este serviço se não for usar Telegram.
   telegram:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
     container_name: evonexus-telegram
     command: ["claude", "--channels", "plugin:telegram@claude-plugins-official", "--dangerously-skip-permissions"]
     environment:
@@ -84,7 +84,7 @@ services:
   # Scheduler — executa rotinas automáticas (daily, weekly, monthly).
   # Opcional: remova este serviço se não for usar rotinas automatizadas.
   scheduler:
-    image: ${EVONEXUS_IMAGE_REGISTRY:-ghcr.io/pedrotecinf}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
+    image: ${EVONEXUS_IMAGE_REGISTRY:-evoapicloud}/evo-nexus-runtime:${EVONEXUS_IMAGE_TAG:?set EVONEXUS_IMAGE_TAG to an immutable sha-* tag}
     container_name: evonexus-scheduler
     command: ["uv", "run", "python", "scheduler.py"]
     environment:

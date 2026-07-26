@@ -46,7 +46,7 @@ Provider (OpenRouter, Anthropic, OpenAI, etc.)
 | --print flag | ✓ | ✓ | ✓ (adapted) |
 | --output-format json | ✓ | ✓ | ✓ (adapted) |
 | --agent flag | ✓ | ✓ | ✓ (→ --skills) |
-| Max turns | --max-turns | --max-turns | AGENT_MAX_TURNS env var |
+| Max turns | --max-turns | --max-turns | `HERMES_MAX_ITERATIONS` |
 | Fallback | None | None | Yes (configurable) |
 | Multi-provider | No | Yes (OpenRouter) | Yes (native) |
 | Cost tracking | Yes | Yes | Yes (via adapter) |
@@ -66,11 +66,10 @@ Edit `config/providers.json`:
       "description": "Hermes Agent — agente AI multi-provedor",
       "cli_command": "hermes",
       "env_vars": {
-        "HERMES_PROVIDER": "openrouter",
         "HERMES_MODEL": "anthropic/claude-sonnet-4",
         "OPENROUTER_API_KEY": "[REDACTED]",
         "ANTHROPIC_API_KEY": "[REDACTED]",
-        "AGENT_MAX_TURNS": "30"
+        "HERMES_MAX_ITERATIONS": "30"
       }
     }
   }
@@ -83,12 +82,11 @@ Hermes provider supports the following env vars:
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
-| `HERMES_PROVIDER` | Default provider | `openrouter`, `anthropic`, `openai` |
 | `HERMES_MODEL` | Default model | `anthropic/claude-sonnet-4`, `gpt-4.1` |
 | `OPENROUTER_API_KEY` | OpenRouter API key | `[REDACTED]` |
 | `ANTHROPIC_API_KEY` | Anthropic API key | `[REDACTED]` |
 | `DEEPSEEK_API_KEY` | DeepSeek API key | `[REDACTED]` |
-| `AGENT_MAX_TURNS` | Max conversation turns | `30` |
+| `HERMES_MAX_ITERATIONS` | Maximum agent loop iterations | `30` |
 
 ### Provider-Specific Configuration
 
@@ -98,7 +96,6 @@ Hermes provider supports the following env vars:
 {
   "hermes": {
     "env_vars": {
-      "HERMES_PROVIDER": "openrouter",
       "HERMES_MODEL": "anthropic/claude-sonnet-4",
       "OPENROUTER_API_KEY": "[REDACTED]"
     }
@@ -112,7 +109,6 @@ Hermes provider supports the following env vars:
 {
   "hermes": {
     "env_vars": {
-      "HERMES_PROVIDER": "anthropic",
       "HERMES_MODEL": "claude-sonnet-4",
       "ANTHROPIC_API_KEY": "[REDACTED]"
     }
@@ -147,23 +143,12 @@ result = run_skill(
 )
 ```
 
-### Fallback Mechanism
+### Rollout and fallback policy
 
-You can configure Hermes to fall back to another provider if it fails:
-
-```python
-from ADWs.runner import run_claude
-
-# Try Hermes, fall back to Claude if it fails
-result = run_claude(
-    "Generate report",
-    log_name="report-generation",
-    timeout=600
-)
-
-# If Hermes fails, EvoNexus will log the error
-# You can then switch providers in config/providers.json
-```
+`config/runtime-rollout.json` controls workflow-level `off`, `shadow`, `canary`,
+and `default` modes. `HERMES_KILL_SWITCH=1` forces the safe Claude path for new
+policy decisions. A failed subprocess is recorded as failed; EvoNexus does not
+silently replay a failed side-effecting action with another provider.
 
 ## Dashboard Integration
 
@@ -182,24 +167,30 @@ The EvoNexus dashboard now supports Hermes provider:
    - Test Hermes installation via `/api/providers/hermes/test`
    - Verify env var configuration
 
+4. **Scoped Control API** (`/api/control/v1/*`)
+   - Requires `HERMES_CONTROL_API_TOKEN`; token rotation may temporarily accept
+     `HERMES_CONTROL_API_TOKEN_PREVIOUS`
+   - Denies every operation unless its exact scope is listed in
+     `HERMES_CONTROL_API_SCOPES`
+   - Supported scopes: `health:read`, `projects:read`, `tickets:read`,
+     `tickets:write`, `comments:write`, `evidence:write`, `goals:read`,
+     `goals:write`, `heartbeats:read`, `heartbeats:write`, `heartbeats:run`,
+     `routines:read`, `routines:run`, `scheduled_tasks:read`,
+     `scheduled_tasks:write`, and `scheduled_tasks:run`
+
 ## Troubleshooting
 
 ### Hermes Not Found
 
 **Error**: `'hermes' not found in PATH`
 
-**Solution**: Install Hermes via npm:
+**Solution**: Install Hermes Agent with `uv`:
 ```bash
-npm install -g @nousresearch/hermes-agent
+uv tool install hermes-agent
 ```
 
-Or build from source:
-```bash
-git clone https://github.com/nousresearch/hermes-agent.git
-cd hermes-agent
-npm install
-npm link
-```
+See the current installation instructions at
+https://hermes-agent.nousresearch.com/docs/getting-started/installation.
 
 ### JSON Parse Errors
 
@@ -244,7 +235,6 @@ cp config/providers.example.json config/providers.json
 
 ### Step 3: Set Environment Variables
 ```bash
-export HERMES_PROVIDER="openrouter"
 export HERMES_MODEL="anthropic/claude-sonnet-4"
 export OPENROUTER_API_KEY="[REDACTED]"
 ```
@@ -271,9 +261,8 @@ You can use any OpenAI-compatible provider with Hermes:
 {
   "hermes": {
     "env_vars": {
-      "HERMES_PROVIDER": "openai-compatible",
       "HERMES_MODEL": "custom-model-name",
-      "HERMES_API_KEY": "[REDACTED]",
+      "OPENAI_API_KEY": "[REDACTED]",
       "OPENAI_BASE_URL": "https://your-custom-endpoint.com/v1"
     }
   }
@@ -291,15 +280,6 @@ result = run_claude(
     agent="my-hermes-profile"  # Maps to --profile or --skills
 )
 ```
-
-## Performance Comparison
-
-| Metric | Claude Code | Hermes (OpenRouter) |
-|--------|-------------|---------------------|
-| Startup time | ~2s | ~3s |
-| First token | ~1s | ~1.5s |
-| Token throughput | ~50 tok/s | ~45 tok/s |
-| Memory usage | ~200MB | ~150MB |
 
 ## Future Enhancements
 

@@ -26,9 +26,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Install todoist CLI
 RUN npm install -g todoist-ts-cli
 
-# Install Composio CLI
-RUN curl -fsSL https://composio.dev/install | bash
-ENV PATH="/root/.composio:$PATH"
 
 # Install Tailscale CLI (for VPN integration)
 RUN curl -fsSL https://tailscale.com/install.sh | sh
