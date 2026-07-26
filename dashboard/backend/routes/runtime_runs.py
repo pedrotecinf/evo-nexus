@@ -51,12 +51,27 @@ def cancel_run(run_id: str):
     if denied:
         return denied
     run = RuntimeRun.query.get_or_404(run_id)
-    if run.status in {"queued", "awaiting_approval"}:
-        transition(run, "cancelled")
-    elif run.status == "running":
-        transition(run, "cancel_requested")
-    else:
+    if run.status not in {"queued", "awaiting_approval", "running"}:
         return jsonify({"error": f"Cannot cancel run with status '{run.status}'"}), 400
+
+    linked_task = None
+    if run.task_id is not None:
+        linked_task = ScheduledTask.query.filter(
+            ScheduledTask.id == run.task_id,
+            ScheduledTask.runtime_run_id == run.id,
+            ScheduledTask.attempt == run.attempt,
+        ).one_or_none()
+    if linked_task is not None:
+        from routes.tasks import _cancel_task_atomically, cancel_task_process
+
+        if not _cancel_task_atomically(linked_task):
+            return jsonify({"error": "Task state changed before cancellation"}), 409
+        cancel_task_process(linked_task.id)
+        db.session.refresh(run)
+    elif run.status in {"queued", "awaiting_approval"}:
+        transition(run, "cancelled")
+    else:
+        transition(run, "cancel_requested")
     return jsonify(run.to_dict())
 
 
@@ -71,12 +86,14 @@ def retry_run(run_id: str):
     task = ScheduledTask.query.get_or_404(run.task_id)
     if task.status != "failed":
         return jsonify({"error": f"Cannot retry task with status '{task.status}'"}), 400
-    task.status = "pending"
-    task.error = None
-    task.completed_at = None
-    db.session.commit()
     from routes.tasks import _start_task
-    if not _start_task(task.id):
+    if not _start_task(
+        task.id,
+        expected_status="failed",
+        expected_attempt=run.attempt,
+        expected_runtime_run_id=run.id,
+        clear_error=True,
+    ):
         return jsonify({"error": "Task could not be claimed for retry"}), 409
     return jsonify({"task": task.to_dict(), "previous_run": run.to_dict()}), 202
 

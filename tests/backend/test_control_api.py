@@ -410,6 +410,175 @@ def test_scheduled_task_run_now(client, app):
         assert queued.scheduled_at.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc)
 
 
+def test_scheduled_task_cancel_reclaims_stale_idempotency_reservation(client, app):
+    import hashlib
+    import json
+    from datetime import datetime, timedelta, timezone
+    from models import ControlApiIdempotency, ScheduledTask, db
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="recover-idempotency",
+            type="prompt",
+            payload="ok",
+            scheduled_at=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        )
+        db.session.add(task)
+        db.session.commit()
+        task_id = task.id
+        reservation = ControlApiIdempotency(
+            operation=f"cancel_scheduled_task:{task_id}",
+            key="stale-cancel-reservation",
+            request_hash=hashlib.sha256(b"{}").hexdigest(),
+            response_status=409,
+            response_json=json.dumps({"error": "request_in_progress"}),
+            created_at=(datetime.now(timezone.utc) - timedelta(minutes=10)).strftime(
+                "%Y-%m-%dT%H:%M:%S.%fZ"
+            ),
+        )
+        db.session.add(reservation)
+        db.session.commit()
+
+    response = client.post(
+        f"/api/control/v1/scheduled-tasks/{task_id}/cancel",
+        headers=headers(**{"Idempotency-Key": "stale-cancel-reservation"}),
+        json={},
+    )
+
+    assert response.status_code == 200
+    assert response.json["data"]["status"] == "cancelled"
+    with app.app_context():
+        reservation = ControlApiIdempotency.query.filter_by(
+            operation=f"cancel_scheduled_task:{task_id}",
+            key="stale-cancel-reservation",
+        ).one()
+        assert reservation.response_status == 200
+
+
+def test_stale_external_reservation_does_not_repeat_unknown_effect(client, app, monkeypatch):
+    import hashlib
+    import heartbeat_dispatcher
+    import json
+    from datetime import datetime, timedelta, timezone
+    from models import ControlApiIdempotency, Heartbeat, db
+
+    with app.app_context():
+        db.session.add(
+            Heartbeat(
+                id="stale-heartbeat",
+                agent="zara-cs",
+                interval_seconds=3600,
+                decision_prompt="Test",
+                enabled=True,
+            )
+        )
+        db.session.add(
+            ControlApiIdempotency(
+                operation="run_heartbeat:stale-heartbeat",
+                key="stale-external-reservation",
+                request_hash=hashlib.sha256(b"{}").hexdigest(),
+                response_status=409,
+                response_json=json.dumps({"error": "request_in_progress"}),
+                created_at=(datetime.now(timezone.utc) - timedelta(minutes=10)).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%fZ"
+                ),
+            )
+        )
+        db.session.commit()
+
+    monkeypatch.setattr(
+        heartbeat_dispatcher,
+        "dispatch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("indeterminate external effect must not be repeated")
+        ),
+    )
+    response = client.post(
+        "/api/control/v1/heartbeats/stale-heartbeat/run",
+        headers=headers(**{"Idempotency-Key": "stale-external-reservation"}),
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert response.json["error"] == "idempotency_outcome_indeterminate"
+
+
+def test_reclaimed_run_now_fences_the_previous_reservation_owner(app, monkeypatch):
+    import threading
+    from datetime import datetime, timedelta, timezone
+
+    import routes.control_api as control_api
+    from models import ControlApiAuditLog, ScheduledTask, db
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="fence-stale-run-now-owner",
+            type="prompt",
+            payload="ok",
+            scheduled_at=datetime(2026, 12, 1, tzinfo=timezone.utc),
+            status="failed",
+        )
+        db.session.add(task)
+        db.session.commit()
+        task_id = task.id
+
+    original_reserve = control_api._reserve_idempotency
+    old_reserved = threading.Event()
+    allow_old_owner = threading.Event()
+
+    def pause_old_owner(operation, key, request_hash, correlation_id):
+        reservation, replay = original_reserve(operation, key, request_hash, correlation_id)
+        if threading.current_thread().name == "old-idempotency-owner" and reservation:
+            reservation.created_at = (
+                datetime.now(timezone.utc) - timedelta(minutes=10)
+            ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            db.session.commit()
+            old_reserved.set()
+            assert allow_old_owner.wait(timeout=10)
+        return reservation, replay
+
+    monkeypatch.setattr(control_api, "_reserve_idempotency", pause_old_owner)
+    request_headers = headers(**{"Idempotency-Key": "reclaimed-run-now-owner"})
+    old_result = {}
+
+    def old_request():
+        with app.test_client() as old_client:
+            old_result["response"] = old_client.post(
+                f"/api/control/v1/scheduled-tasks/{task_id}/run",
+                headers=request_headers,
+                json={},
+            )
+
+    old_thread = threading.Thread(target=old_request, name="old-idempotency-owner")
+    old_thread.start()
+    assert old_reserved.wait(timeout=10)
+
+    with app.test_client() as new_client:
+        new_response = new_client.post(
+            f"/api/control/v1/scheduled-tasks/{task_id}/run",
+            headers=request_headers,
+            json={},
+        )
+    assert new_response.status_code == 202
+
+    with app.app_context():
+        task = db.session.get(ScheduledTask, task_id)
+        task.status = "failed"
+        db.session.commit()
+
+    allow_old_owner.set()
+    old_thread.join(timeout=10)
+    assert not old_thread.is_alive()
+    assert old_result["response"].status_code == 409
+
+    with app.app_context():
+        assert db.session.get(ScheduledTask, task_id).status == "failed"
+        assert ControlApiAuditLog.query.filter_by(
+            operation="run_scheduled_task",
+            resource=f"scheduled_task:{task_id}",
+        ).count() == 1
+
+
 def test_routines_list(client, monkeypatch):
     monkeypatch.setattr("routes.control_api.discover_routines", lambda: {"morning": {"name": "Good Morning", "agent": "clawdia", "custom": False, "script": "good_morning.py", "script_key": "good_morning"}}, raising=False)
     import routes.control_api as _mod

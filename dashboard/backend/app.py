@@ -671,14 +671,22 @@ if __name__ == "__main__":
         import time as _time
         while True:
             with app.app_context():
+                try:
+                    from routes.tasks import recover_interrupted_work
+                    recovered = recover_interrupted_work()
+                    if any(recovered.values()):
+                        app.logger.warning("Recovered interrupted work: %s", recovered)
+                except Exception:
+                    app.logger.exception("Failed to recover interrupted work")
                 _run_pending_tasks()
             _time.sleep(30)
-
-    task_thread = threading.Thread(target=_poll_scheduled_tasks, daemon=True, name="task-poller")
-    task_thread.start()
 
     # Dev mode: EVONEXUS_DEV=1 enables Flask's auto-reloader so edits to
     # dashboard/backend/*.py take effect without a manual restart. Disabled by
     # default — production runs with a fixed process managed by systemd/docker.
     dev_mode = os.getenv("EVONEXUS_DEV") == "1"
+    if not dev_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        task_thread = threading.Thread(target=_poll_scheduled_tasks, daemon=True, name="task-poller")
+        task_thread.start()
+
     app.run(host="0.0.0.0", port=port, debug=dev_mode, use_reloader=dev_mode)

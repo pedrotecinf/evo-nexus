@@ -82,6 +82,161 @@ def test_scheduled_task_links_to_ticket(app):
         assert fetched.to_dict()["ticket_id"] == "ticket-1"
 
 
+def test_cancel_runtime_run_cancels_linked_running_task_atomically(app, monkeypatch):
+    import routes.runtime_runs as runtime_routes
+    from models import RuntimeRun, ScheduledTask, db
+    from runtime_runs import create_run
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="cancel-linked-queued-run",
+            type="prompt",
+            payload="ok",
+            status="running",
+            scheduled_at=datetime.now(timezone.utc),
+        )
+        db.session.add(task)
+        db.session.commit()
+        run = create_run(task.id)
+        task.runtime_run_id = run.id
+        task.attempt = run.attempt
+        db.session.commit()
+        run_id = run.id
+        task_id = task.id
+
+        monkeypatch.setattr(runtime_routes, "_require", lambda _action: None)
+        with app.test_request_context(method="POST"):
+            response = runtime_routes.cancel_run(run_id)
+
+        assert response.status_code == 200
+        assert db.session.get(ScheduledTask, task_id).status == "cancelled"
+        assert db.session.get(RuntimeRun, run_id).status == "cancelled"
+
+
+def test_cancel_active_runtime_run_cancels_task_and_signals_process(app, monkeypatch):
+    import routes.runtime_runs as runtime_routes
+    from models import RuntimeRun, ScheduledTask, db
+    from runtime_runs import create_run, transition
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="cancel-linked-active-run",
+            type="prompt",
+            payload="ok",
+            status="running",
+            scheduled_at=datetime.now(timezone.utc),
+        )
+        db.session.add(task)
+        db.session.commit()
+        run = create_run(task.id)
+        task.runtime_run_id = run.id
+        task.attempt = run.attempt
+        db.session.commit()
+        transition(run, "running")
+        run_id = run.id
+        task_id = task.id
+        signalled = []
+
+        monkeypatch.setattr(runtime_routes, "_require", lambda _action: None)
+        monkeypatch.setattr(
+            "routes.tasks.cancel_task_process",
+            lambda cancelled_task_id: signalled.append(cancelled_task_id) or True,
+        )
+        with app.test_request_context(method="POST"):
+            response = runtime_routes.cancel_run(run_id)
+
+        assert response.status_code == 200
+        assert db.session.get(ScheduledTask, task_id).status == "cancelled"
+        assert db.session.get(RuntimeRun, run_id).status == "cancel_requested"
+        assert signalled == [task_id]
+
+
+def test_cancel_awaiting_approval_runtime_run_signals_registered_process(app, monkeypatch):
+    import routes.runtime_runs as runtime_routes
+    from models import RuntimeRun, ScheduledTask, db
+    from runtime_runs import create_run, request_approval, transition
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="cancel-linked-awaiting-run",
+            type="prompt",
+            payload="ok",
+            status="running",
+            scheduled_at=datetime.now(timezone.utc),
+        )
+        db.session.add(task)
+        db.session.commit()
+        run = create_run(task.id)
+        task.runtime_run_id = run.id
+        task.attempt = run.attempt
+        db.session.commit()
+        transition(run, "running")
+        request_approval(run, "publish")
+        run_id = run.id
+        task_id = task.id
+        signalled = []
+
+        monkeypatch.setattr(runtime_routes, "_require", lambda _action: None)
+        monkeypatch.setattr(
+            "routes.tasks.cancel_task_process",
+            lambda cancelled_task_id: signalled.append(cancelled_task_id) or True,
+        )
+        with app.test_request_context(method="POST"):
+            response = runtime_routes.cancel_run(run_id)
+
+        assert response.status_code == 200
+        assert db.session.get(ScheduledTask, task_id).status == "cancelled"
+        assert db.session.get(RuntimeRun, run_id).status == "cancelled"
+        assert signalled == [task_id]
+
+
+def test_retry_failed_runtime_run_claims_task_without_pending_window(app, monkeypatch):
+    import routes.runtime_runs as runtime_routes
+    import routes.tasks as task_routes
+    from models import RuntimeRun, ScheduledTask, db
+    from runtime_runs import create_run, transition
+
+    class DeferredThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            return None
+
+    with app.app_context():
+        task = ScheduledTask(
+            name="retry-linked-failed-run",
+            type="prompt",
+            payload="ok",
+            status="running",
+            scheduled_at=datetime.now(timezone.utc),
+        )
+        db.session.add(task)
+        db.session.commit()
+        run = create_run(task.id)
+        task.runtime_run_id = run.id
+        task.attempt = run.attempt
+        db.session.commit()
+        transition(run, "running")
+        transition(run, "failed", error="failed")
+        task.status = "failed"
+        task.error = "failed"
+        db.session.commit()
+        run_id = run.id
+        task_id = task.id
+
+        monkeypatch.setattr(runtime_routes, "_require", lambda _action: None)
+        monkeypatch.setattr(task_routes.threading, "Thread", DeferredThread)
+        with app.test_request_context(method="POST"):
+            response, status = runtime_routes.retry_run(run_id)
+
+        assert status == 202
+        assert response.get_json()["task"]["status"] == "running"
+        assert db.session.get(ScheduledTask, task_id).status == "running"
+        assert db.session.get(RuntimeRun, run_id).status == "failed"
+
+
 def test_goal_linked_run_preserves_auditable_origin_and_evidence(app):
     from models import Goal, GoalProject, Mission, Ticket
     from runtime_runs import add_evidence, create_run

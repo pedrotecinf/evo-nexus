@@ -7,7 +7,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, jsonify, request
@@ -31,6 +31,21 @@ MAX_EVIDENCE = 8_000
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _idempotency_reservation_cutoff() -> str:
+    try:
+        lease_seconds = int(os.environ.get("EVONEXUS_IDEMPOTENCY_LEASE_SECONDS", "300"))
+    except ValueError:
+        lease_seconds = 300
+    lease_seconds = max(1, lease_seconds)
+    return (datetime.now(timezone.utc) - timedelta(seconds=lease_seconds)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
+
+
+def _can_reclaim_idempotency(operation: str) -> bool:
+    return operation.startswith(("cancel_scheduled_task:", "run_scheduled_task:"))
 
 
 def _correlation_id() -> str:
@@ -129,6 +144,18 @@ def _replay(operation: str, key: str, request_hash: str, correlation_id: str):
         return None
     if not secrets.compare_digest(existing.request_hash, request_hash):
         return _response(error="idempotency_conflict", status=409, correlation_id=correlation_id)
+    if (
+        existing.response_status == 409
+        and existing.response_json == json.dumps({"error": "request_in_progress"})
+        and existing.created_at < _idempotency_reservation_cutoff()
+    ):
+        if _can_reclaim_idempotency(operation):
+            return None
+        return _response(
+            error="idempotency_outcome_indeterminate",
+            status=409,
+            correlation_id=correlation_id,
+        )
     return _response(json.loads(existing.response_json), status=existing.response_status, correlation_id=correlation_id)
 
 
@@ -151,13 +178,37 @@ def _reserve_idempotency(
     request_hash: str,
     correlation_id: str,
 ):
+    in_progress = json.dumps({"error": "request_in_progress"})
+    reclaimed = 0
+    owner_token = _now()
+    if _can_reclaim_idempotency(operation):
+        reclaimed = ControlApiIdempotency.query.filter(
+            ControlApiIdempotency.operation == operation,
+            ControlApiIdempotency.key == key,
+            ControlApiIdempotency.request_hash == request_hash,
+            ControlApiIdempotency.response_status == 409,
+            ControlApiIdempotency.response_json == in_progress,
+            ControlApiIdempotency.created_at < _idempotency_reservation_cutoff(),
+        ).update(
+            {ControlApiIdempotency.created_at: owner_token},
+            synchronize_session="fetch",
+        )
+    if reclaimed == 1:
+        db.session.commit()
+        reservation = ControlApiIdempotency.query.filter_by(
+            operation=operation,
+            key=key,
+        ).one()
+        reservation._owner_token = owner_token
+        return reservation, None
+
     reservation = ControlApiIdempotency(
         operation=operation,
         key=key,
         request_hash=request_hash,
         response_status=409,
-        response_json=json.dumps({"error": "request_in_progress"}),
-        created_at=_now(),
+        response_json=in_progress,
+        created_at=owner_token,
     )
     db.session.add(reservation)
     try:
@@ -172,7 +223,27 @@ def _reserve_idempotency(
                 error="request_in_progress", status=409, correlation_id=correlation_id
             )
         return None, replay
+    reservation._owner_token = owner_token
     return reservation, None
+
+
+def _claim_idempotency_owner(reservation: ControlApiIdempotency) -> bool:
+    """Fence reclaimed reservation holders before a transactional mutation."""
+    in_progress = json.dumps({"error": "request_in_progress"})
+    owner_token = getattr(reservation, "_owner_token", reservation.created_at)
+    claimed = ControlApiIdempotency.query.filter(
+        ControlApiIdempotency.id == reservation.id,
+        ControlApiIdempotency.created_at == owner_token,
+        ControlApiIdempotency.response_status == 409,
+        ControlApiIdempotency.response_json == in_progress,
+    ).update(
+        {ControlApiIdempotency.response_json: json.dumps({"error": "request_committing"})},
+        synchronize_session="fetch",
+    )
+    if claimed != 1:
+        db.session.rollback()
+        return False
+    return True
 
 
 def _require_idempotency(operation: str, data: dict, correlation_id: str):
@@ -646,13 +717,34 @@ def cancel_control_scheduled_task(task_id: int, correlation_id: str):
     task = ScheduledTask.query.get(task_id)
     if task is None:
         return _response(error="not_found", status=404, correlation_id=correlation_id)
-    if task.status == "running":
-        return _response(error="cannot_cancel_running", status=409, correlation_id=correlation_id)
     if task.status != "pending":
+        error = "cannot_cancel_running" if task.status == "running" else "invalid_transition"
+        return _response(error=error, status=409, correlation_id=correlation_id)
+    assert idem is not None
+    assert idem[1] is not None
+    reservation, concurrent_replay = _reserve_idempotency(
+        f"cancel_scheduled_task:{task_id}", idem[0], idem[1], correlation_id
+    )
+    if concurrent_replay:
+        return concurrent_replay
+    assert reservation is not None
+    if not _claim_idempotency_owner(reservation):
+        return _response(
+            error="idempotency_lease_lost", status=409, correlation_id=correlation_id
+        )
+    updated = ScheduledTask.query.filter(
+        ScheduledTask.id == task_id,
+        ScheduledTask.status == "pending",
+    ).update({ScheduledTask.status: "cancelled"}, synchronize_session="fetch")
+    if updated != 1:
+        reservation.response_status = 409
+        reservation.response_json = json.dumps({"error": "invalid_transition"})
+        db.session.commit()
         return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
-    task.status = "cancelled"
+    task = db.session.get(ScheduledTask, task_id)
     response = task.to_dict()
-    _record_idempotent(f"cancel_scheduled_task:{task_id}", idem[0], idem[1], 200, response)
+    reservation.response_status = 200
+    reservation.response_json = json.dumps(response)
     _audit("cancel_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "cancelled")
     db.session.commit()
     return _response(response, correlation_id=correlation_id)
@@ -672,10 +764,37 @@ def run_control_scheduled_task(task_id: int, correlation_id: str):
         return _response(error="not_found", status=404, correlation_id=correlation_id)
     if task.status not in {"pending", "failed"}:
         return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
-    task.status = "pending"
-    task.scheduled_at = datetime.now(timezone.utc)
+    assert idem is not None
+    assert idem[1] is not None
+    reservation, concurrent_replay = _reserve_idempotency(
+        f"run_scheduled_task:{task_id}", idem[0], idem[1], correlation_id
+    )
+    if concurrent_replay:
+        return concurrent_replay
+    assert reservation is not None
+    if not _claim_idempotency_owner(reservation):
+        return _response(
+            error="idempotency_lease_lost", status=409, correlation_id=correlation_id
+        )
+    updated = ScheduledTask.query.filter(
+        ScheduledTask.id == task_id,
+        ScheduledTask.status.in_(("pending", "failed")),
+    ).update(
+        {
+            ScheduledTask.status: "pending",
+            ScheduledTask.scheduled_at: datetime.now(timezone.utc),
+        },
+        synchronize_session="fetch",
+    )
+    if updated != 1:
+        reservation.response_status = 409
+        reservation.response_json = json.dumps({"error": "invalid_transition"})
+        db.session.commit()
+        return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
+    task = db.session.get(ScheduledTask, task_id)
     response = task.to_dict()
-    _record_idempotent(f"run_scheduled_task:{task_id}", idem[0], idem[1], 202, response)
+    reservation.response_status = 202
+    reservation.response_json = json.dumps(response)
     _audit("run_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "queued")
     db.session.commit()
     return _response(response, status=202, correlation_id=correlation_id)

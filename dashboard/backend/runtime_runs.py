@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import sys
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from sqlalchemy import and_, or_
 
 from event_bus import publish
 from models import RuntimeRun, RuntimeRunApproval, RuntimeRunEvidence, db
@@ -71,7 +74,7 @@ def request_approval(run: RuntimeRun, action: str) -> RuntimeRunApproval:
         id=str(uuid.uuid4()), run_id=run.id,
         action_hash=hashlib.sha256(action.encode()).hexdigest(),
     )
-    transition(run, "awaiting_approval")
+    transition(run, "awaiting_approval", commit=False)
     db.session.add(approval)
     db.session.commit()
     return approval
@@ -80,11 +83,51 @@ def request_approval(run: RuntimeRun, action: str) -> RuntimeRunApproval:
 def decide_approval(run: RuntimeRun, approval: RuntimeRunApproval, *, approved: bool, actor: str) -> RuntimeRun:
     if approval.status != "pending":
         raise ValueError("Approval is already decided")
-    approval.status = "approved" if approved else "rejected"
-    approval.decided_by = actor
-    approval.decided_at = datetime.now(timezone.utc)
-    transition(run, "running" if approved else "cancelled")
-    db.session.commit()
+    handoff = None
+    if not approved and run.task_id is not None:
+        from routes.tasks import _spawn_handoff_lock
+
+        handoff = _spawn_handoff_lock(run.task_id)
+
+    cancelled_task_id = None
+    with handoff or nullcontext():
+        approval.status = "approved" if approved else "rejected"
+        approval.decided_by = actor
+        approval.decided_at = datetime.now(timezone.utc)
+        if run.task_id is not None:
+            from models import ScheduledTask
+
+            task_updates = (
+                {
+                    ScheduledTask.started_at: datetime.now(timezone.utc),
+                }
+                if approved
+                else {
+                    ScheduledTask.status: "cancelled",
+                    ScheduledTask.completed_at: datetime.now(timezone.utc),
+                }
+            )
+            updated = ScheduledTask.query.filter(
+                ScheduledTask.id == run.task_id,
+                ScheduledTask.status == "running",
+                ScheduledTask.runtime_run_id == run.id,
+                ScheduledTask.attempt == run.attempt,
+            ).update(task_updates, synchronize_session="fetch")
+            still_linked = ScheduledTask.query.filter(
+                ScheduledTask.id == run.task_id,
+                ScheduledTask.runtime_run_id == run.id,
+            ).count()
+            if updated != 1 and still_linked:
+                db.session.rollback()
+                raise ValueError("Linked scheduled task changed before approval decision")
+            if not approved and updated == 1:
+                cancelled_task_id = run.task_id
+        transition(run, "running" if approved else "cancelled", commit=False)
+        db.session.commit()
+        if cancelled_task_id is not None:
+            from routes.tasks import cancel_task_process
+
+            cancel_task_process(cancelled_task_id)
     return run
 
 
@@ -141,30 +184,93 @@ def compute_metrics() -> dict:
 
 
 def recover_orphaned_runs(lease_seconds: int = 900) -> int:
+    from models import ScheduledTask
+
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=lease_seconds)
-    stale = RuntimeRun.query.filter(RuntimeRun.status.in_(("running", "cancel_requested")), RuntimeRun.started_at < cutoff).all()
+    stale_condition = or_(
+        and_(RuntimeRun.status == "queued", RuntimeRun.queued_at < cutoff),
+        and_(
+            RuntimeRun.status.in_(("running", "cancel_requested")),
+            RuntimeRun.started_at < cutoff,
+        ),
+    )
+    attached_to_active_task = ScheduledTask.query.filter(
+        ScheduledTask.status == "running",
+        ScheduledTask.runtime_run_id == RuntimeRun.id,
+        ScheduledTask.attempt == RuntimeRun.attempt,
+    ).exists()
+    stale = RuntimeRun.query.filter(
+        stale_condition,
+        ~attached_to_active_task,
+    ).order_by(RuntimeRun.id).all()
+    recovered = 0
+    completed_at = datetime.now(timezone.utc)
     for run in stale:
-        transition(run, "failed", error="Worker lease expired after restart", exit_code=-1)
-    return len(stale)
+        ownership = RuntimeRun.query.filter(
+            RuntimeRun.id == run.id,
+            RuntimeRun.status == run.status,
+        )
+        if run.status == "queued":
+            ownership = ownership.filter(RuntimeRun.queued_at < cutoff)
+        else:
+            ownership = ownership.filter(RuntimeRun.started_at < cutoff)
+        claimed = ownership.update(
+            {
+                RuntimeRun.status: "failed",
+                RuntimeRun.completed_at: completed_at,
+                RuntimeRun.error: "Worker lease expired",
+                RuntimeRun.exit_code: -1,
+            },
+            synchronize_session="fetch",
+        )
+        if claimed:
+            publish(
+                "run.failed",
+                f"run:{run.id}",
+                run.correlation_id,
+                {"task_id": run.task_id, "attempt": run.attempt},
+            )
+            recovered += 1
+    db.session.commit()
+    return recovered
 
 
-def transition(run: RuntimeRun, target: str, *, summary: str | None = None, error: str | None = None, exit_code: int | None = None) -> RuntimeRun:
+def transition(
+    run: RuntimeRun,
+    target: str,
+    *,
+    summary: str | None = None,
+    error: str | None = None,
+    exit_code: int | None = None,
+    commit: bool = True,
+) -> RuntimeRun:
     if target == run.status:
         return run
     if target not in TRANSITIONS.get(run.status, set()):
         raise ValueError(f"Invalid runtime run transition: {run.status} -> {target}")
-    run.status = target
+    current_status = run.status
     now = datetime.now(timezone.utc)
-    if target == "running" and run.started_at is None:
-        run.started_at = now
+    updates: dict = {RuntimeRun.status: target}
+    if target == "running":
+        updates[RuntimeRun.started_at] = now
     if target in TERMINAL:
-        run.completed_at = now
+        updates[RuntimeRun.completed_at] = now
     if summary is not None:
-        run.result_summary = summary[:5000]
+        updates[RuntimeRun.result_summary] = summary[:5000]
     if error is not None:
-        run.error = error[:2000]
+        updates[RuntimeRun.error] = error[:2000]
     if exit_code is not None:
-        run.exit_code = exit_code
+        updates[RuntimeRun.exit_code] = exit_code
+    updated = RuntimeRun.query.filter(
+        RuntimeRun.id == run.id,
+        RuntimeRun.status == current_status,
+    ).update(updates, synchronize_session="fetch")
+    if updated != 1:
+        db.session.rollback()
+        raise ValueError(
+            f"Concurrent runtime run transition: {current_status} -> {target}"
+        )
     publish(f"run.{target}", f"run:{run.id}", run.correlation_id, {"task_id": run.task_id, "attempt": run.attempt})
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return run
