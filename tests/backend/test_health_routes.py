@@ -40,7 +40,6 @@ def app(workspace, monkeypatch):
     import models as _models
     import routes.health as _health
 
-    importlib.reload(_models)
     importlib.reload(_health)
     monkeypatch.setattr(_health, "WORKSPACE", workspace)
 

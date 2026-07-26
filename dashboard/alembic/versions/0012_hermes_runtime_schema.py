@@ -35,15 +35,37 @@ def _add_column(conn, table: str, column: sa.Column) -> None:
         op.add_column(table, column)
 
 
+def _set_ticket_status_constraint(conn, statuses: tuple[str, ...]) -> None:
+    if not _has_table(conn, "tickets"):
+        return
+    constraint_names = {
+        item["name"] for item in inspect(conn).get_check_constraints("tickets")
+    }
+    quoted = ",".join(f"'{status}'" for status in statuses)
+    recreate = "always" if conn.dialect.name == "sqlite" else "auto"
+    with op.batch_alter_table("tickets", recreate=recreate) as batch:
+        if "ck_ticket_status" in constraint_names:
+            batch.drop_constraint("ck_ticket_status", type_="check")
+        batch.create_check_constraint("ck_ticket_status", f"status IN ({quoted})")
+
+
 def upgrade() -> None:
     conn = op.get_bind()
+
+    _set_ticket_status_constraint(
+        conn,
+        ("open", "in_progress", "blocked", "review", "resolved", "closed", "archived"),
+    )
 
     _add_column(conn, "heartbeats", sa.Column("handler", sa.Text, nullable=True))
     for name, column_type in (
         ("decision_action", sa.Text()),
         ("decision_json", sa.Text()),
         ("provider", sa.String(64)),
+        ("requested_profile", sa.String(64)),
         ("resolved_profile", sa.String(64)),
+        ("exit_code", sa.Integer()),
+        ("fallback_from", sa.String(64)),
         ("stdout_tail", sa.Text()),
         ("stderr_tail", sa.Text()),
         ("runtime_run_id", sa.String(36)),
@@ -75,11 +97,11 @@ def upgrade() -> None:
         op.create_table(
             "runtime_runs",
             sa.Column("id", sa.String(36), primary_key=True),
-            sa.Column("task_id", sa.Integer, nullable=True),
+            sa.Column("task_id", sa.Integer, sa.ForeignKey("scheduled_tasks.id"), nullable=True),
             sa.Column("origin_type", sa.String(32), nullable=False, server_default="scheduled_task"),
             sa.Column("origin_id", sa.String(128), nullable=True),
-            sa.Column("ticket_id", sa.String(36), nullable=True),
-            sa.Column("goal_id", sa.Integer, nullable=True),
+            sa.Column("ticket_id", sa.String(36), sa.ForeignKey("tickets.id"), nullable=True),
+            sa.Column("goal_id", sa.Integer, sa.ForeignKey("goals.id"), nullable=True),
             sa.Column("agent_slug", sa.String(100), nullable=True),
             sa.Column("status", sa.String(32), nullable=False, server_default="queued"),
             sa.Column("attempt", sa.Integer, nullable=False, server_default="1"),
@@ -202,9 +224,17 @@ def downgrade() -> None:
         if _has_table(conn, table):
             op.drop_table(table)
 
+    if _has_table(conn, "tickets"):
+        conn.execute(sa.text("UPDATE tickets SET status = 'closed' WHERE status = 'archived'"))
+        _set_ticket_status_constraint(
+            conn,
+            ("open", "in_progress", "blocked", "review", "resolved", "closed"),
+        )
+
     for column in (
-        "runtime_run_id", "stderr_tail", "stdout_tail", "resolved_profile",
-        "provider", "decision_json", "decision_action",
+        "runtime_run_id", "stderr_tail", "stdout_tail", "fallback_from",
+        "exit_code", "resolved_profile", "requested_profile", "provider",
+        "decision_json", "decision_action",
     ):
         if _has_column(conn, "heartbeat_runs", column):
             op.drop_column("heartbeat_runs", column)

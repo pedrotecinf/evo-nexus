@@ -86,3 +86,35 @@ def test_timeout_kills_process_group(tmp_path):
             result = service.invoke(request)
             assert result.status == "timeout"
         killpg.assert_called_once()
+
+
+def test_provider_output_is_redacted_before_returning(tmp_path, monkeypatch):
+    from runtime_service import RuntimeRequest, RuntimeService
+
+    secret = "provider-secret-value"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    service = RuntimeService(providers_path=_providers(tmp_path, "anthropic"))
+    request = RuntimeRequest(
+        origin_type="heartbeat",
+        origin_id="hb-1",
+        agent_slug="atlas-project",
+        prompt="decide",
+        max_turns=1,
+        timeout_seconds=10,
+    )
+
+    with patch("runtime_service.shutil.which", return_value="/bin/claude"), patch(
+        "runtime_service.subprocess.Popen"
+    ) as popen:
+        process = popen.return_value
+        process.communicate.return_value = (
+            f"partial output {secret}",
+            f"Authorization: Bearer {secret}",
+        )
+        process.returncode = 1
+        result = service.invoke(request)
+
+    assert secret not in result.output
+    assert secret not in result.error
+    assert "[REDACTED]" in result.output
+    assert "[REDACTED]" in result.error

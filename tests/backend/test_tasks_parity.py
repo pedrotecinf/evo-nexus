@@ -18,7 +18,7 @@ for path in (str(BACKEND_DIR), str(ADW_DIR)):
 @pytest.fixture
 def app():
     import models
-    importlib.reload(models)
+
     app = Flask(__name__)
     app.config.update(TESTING=True, SQLALCHEMY_DATABASE_URI="sqlite:///:memory:", SQLALCHEMY_TRACK_MODIFICATIONS=False)
     models.db.init_app(app)

@@ -19,6 +19,7 @@ from models import (
     TICKET_PRIORITIES, TICKET_STATUSES, db,
 )
 from event_bus import publish as publish_event
+from secret_redaction import redact_secrets
 
 bp = Blueprint("control_api", __name__)
 ACTOR = "service:hermes"
@@ -144,6 +145,36 @@ def _record_idempotent(operation: str, key: str, request_hash: str, status: int,
     )
 
 
+def _reserve_idempotency(
+    operation: str,
+    key: str,
+    request_hash: str,
+    correlation_id: str,
+):
+    reservation = ControlApiIdempotency(
+        operation=operation,
+        key=key,
+        request_hash=request_hash,
+        response_status=409,
+        response_json=json.dumps({"error": "request_in_progress"}),
+        created_at=_now(),
+    )
+    db.session.add(reservation)
+    try:
+        # Commit the claim before any external effect. The unique constraint is
+        # the cross-process arbiter for concurrent requests with the same key.
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        replay = _replay(operation, key, request_hash, correlation_id)
+        if replay is None:
+            replay = _response(
+                error="request_in_progress", status=409, correlation_id=correlation_id
+            )
+        return None, replay
+    return reservation, None
+
+
 def _require_idempotency(operation: str, data: dict, correlation_id: str):
     key, error = _idempotency_key()
     if error:
@@ -215,18 +246,40 @@ def checkout_ticket(ticket_id: str, correlation_id: str):
         return replay
     if key is None:
         return request_hash
-    ticket = Ticket.query.get(ticket_id)
-    if ticket is None:
-        return _response(error="not_found", status=404, correlation_id=correlation_id)
     agent, validation = _string(data, "agent", 100, required=True)
     if validation:
         return _response(error=validation, status=400, correlation_id=correlation_id)
-    if ticket.locked_at is not None:
+    lock_timeout = data.get("lock_timeout_seconds", 1800)
+    if (
+        isinstance(lock_timeout, bool)
+        or not isinstance(lock_timeout, int)
+        or not 1 <= lock_timeout <= 86400
+    ):
+        return _response(
+            error="invalid_lock_timeout_seconds",
+            status=400,
+            correlation_id=correlation_id,
+        )
+
+    locked_at = _now()
+    updated = Ticket.query.filter(
+        Ticket.id == ticket_id,
+        Ticket.locked_at.is_(None),
+    ).update(
+        {
+            Ticket.locked_at: locked_at,
+            Ticket.locked_by: agent,
+            Ticket.lock_timeout_seconds: lock_timeout,
+            Ticket.updated_at: locked_at,
+        },
+        synchronize_session=False,
+    )
+    if updated != 1:
+        if Ticket.query.filter_by(id=ticket_id).one_or_none() is None:
+            return _response(error="not_found", status=404, correlation_id=correlation_id)
         return _response(error="already_locked", status=409, correlation_id=correlation_id)
-    ticket.locked_at = _now()
-    ticket.locked_by = agent
-    ticket.lock_timeout_seconds = data.get("lock_timeout_seconds", 1800)
-    ticket.updated_at = _now()
+
+    ticket = Ticket.query.filter_by(id=ticket_id).one()
     db.session.add(TicketActivity(id=str(uuid.uuid4()), ticket_id=ticket.id, actor=ACTOR, action="checkout", payload=json.dumps({"agent": agent} ), created_at=_now()))
     response = _ticket_data(ticket)
     _record_idempotent(f"checkout_ticket:{ticket_id}", key, request_hash, 200, response)
@@ -543,13 +596,27 @@ def run_control_heartbeat(heartbeat_id: str, correlation_id: str):
         return replay
     if Heartbeat.query.get(heartbeat_id) is None:
         return _response(error="not_found", status=404, correlation_id=correlation_id)
+    assert idem is not None
+    assert idem[1] is not None
+    reservation, concurrent_replay = _reserve_idempotency(
+        f"run_heartbeat:{heartbeat_id}", idem[0], idem[1], correlation_id
+    )
+    if concurrent_replay:
+        return concurrent_replay
+    assert reservation is not None
     from heartbeat_dispatcher import dispatch
-    dispatched, run_id = dispatch(heartbeat_id, "manual")
-    response = {"heartbeat_id": heartbeat_id, "run_id": run_id, "status": "dispatched" if dispatched else "not_dispatched"}
-    _record_idempotent(f"run_heartbeat:{heartbeat_id}", idem[0], idem[1], 202, response)
+    try:
+        dispatched, run_id = dispatch(heartbeat_id, "manual")
+        response = {"heartbeat_id": heartbeat_id, "run_id": run_id, "status": "dispatched" if dispatched else "not_dispatched"}
+        status_code = 202
+    except Exception as exc:
+        response = {"heartbeat_id": heartbeat_id, "run_id": None, "status": "dispatch_failed", "error": redact_secrets(exc, limit=500)}
+        status_code = 500
+    reservation.response_status = status_code
+    reservation.response_json = json.dumps(response)
     _audit("run_heartbeat", f"heartbeat:{heartbeat_id}", correlation_id, response["status"])
     db.session.commit()
-    return _response(response, status=202, correlation_id=correlation_id)
+    return _response(response, status=status_code, correlation_id=correlation_id)
 
 
 @bp.route("/api/control/v1/scheduled-tasks")
@@ -606,6 +673,7 @@ def run_control_scheduled_task(task_id: int, correlation_id: str):
     if task.status not in {"pending", "failed"}:
         return _response(error="invalid_transition", status=409, correlation_id=correlation_id)
     task.status = "pending"
+    task.scheduled_at = datetime.now(timezone.utc)
     response = task.to_dict()
     _record_idempotent(f"run_scheduled_task:{task_id}", idem[0], idem[1], 202, response)
     _audit("run_scheduled_task", f"scheduled_task:{task_id}", correlation_id, "queued")
@@ -694,6 +762,8 @@ def run_control_routine(routine_id: str, correlation_id: str):
     idem, replay = _controlled_mutation(f"run_routine:{routine_id}", data, correlation_id)
     if replay:
         return replay
+    assert idem is not None
+    assert idem[1] is not None
 
     registry = discover_routines()
     if routine_id not in registry:
@@ -707,6 +777,13 @@ def run_control_routine(routine_id: str, correlation_id: str):
     if not script_path.is_file():
         return _response(error="script_not_found", status=404, correlation_id=correlation_id)
 
+    reservation, concurrent_replay = _reserve_idempotency(
+        f"run_routine:{routine_id}", idem[0], idem[1], correlation_id
+    )
+    if concurrent_replay:
+        return concurrent_replay
+    assert reservation is not None
+
     try:
         import shutil
         python = shutil.which("python3") or "python3"
@@ -719,17 +796,18 @@ def run_control_routine(routine_id: str, correlation_id: str):
         response = {
             "routine_id": routine_id,
             "exit_code": proc.returncode,
-            "stdout": (proc.stdout or "")[:5000],
-            "stderr": (proc.stderr or "")[:2000],
+            "stdout": redact_secrets(proc.stdout, limit=5000),
+            "stderr": redact_secrets(proc.stderr, limit=2000),
             "success": proc.returncode == 0,
         }
     except subprocess.TimeoutExpired:
         response = {"routine_id": routine_id, "exit_code": -1, "stdout": "", "stderr": "timeout", "success": False}
     except Exception as exc:
-        response = {"routine_id": routine_id, "exit_code": -1, "stdout": "", "stderr": str(exc)[:2000], "success": False}
+        response = {"routine_id": routine_id, "exit_code": -1, "stdout": "", "stderr": redact_secrets(exc, limit=2000), "success": False}
 
     status_code = 200 if response["success"] else 500
-    _record_idempotent(f"run_routine:{routine_id}", idem[0], idem[1], status_code, response)
+    reservation.response_status = status_code
+    reservation.response_json = json.dumps(response)
     _audit("run_routine", f"routine:{routine_id}", correlation_id, "success" if response["success"] else "failed")
     db.session.commit()
     return _response(response, status=status_code, correlation_id=correlation_id)

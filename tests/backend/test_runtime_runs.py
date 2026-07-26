@@ -15,7 +15,6 @@ sys.path.insert(0, str(BACKEND_DIR))
 @pytest.fixture
 def app():
     import models
-    importlib.reload(models)
     import runtime_runs
     importlib.reload(runtime_runs)
     app = Flask(__name__)

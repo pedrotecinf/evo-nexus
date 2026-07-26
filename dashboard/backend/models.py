@@ -578,6 +578,7 @@ class Heartbeat(db.Model):
     goal_id = db.Column(db.String(100), nullable=True)  # FK stub for Feature 1.2
     required_secrets = db.Column(db.Text, nullable=True, default="[]")  # JSON array
     decision_prompt = db.Column(db.Text, nullable=False)
+    handler = db.Column(db.Text, nullable=True)
     source_plugin = db.Column(db.Text, nullable=True)  # Wave 1.1: plugin slug if contributed by a plugin
     created_at = db.Column(db.String(30), default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
     updated_at = db.Column(db.String(30), default=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"), onupdate=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
@@ -621,6 +622,7 @@ class Heartbeat(db.Model):
             "goal_id": self.goal_id,
             "required_secrets": self.required_secrets_list,
             "decision_prompt": self.decision_prompt,
+            "handler": self.handler,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "last_run": last_run.to_dict() if last_run else None,
@@ -645,6 +647,16 @@ class HeartbeatRun(db.Model):
     prompt_preview = db.Column(db.Text, nullable=True)
     error = db.Column(db.Text, nullable=True)
     triggered_by = db.Column(db.String(50), nullable=True)  # interval, manual, new_task, mention, approval_decision
+    decision_action = db.Column(db.Text, nullable=True)
+    decision_json = db.Column(db.Text, nullable=True)
+    provider = db.Column(db.String(64), nullable=True)
+    requested_profile = db.Column(db.String(64), nullable=True)
+    resolved_profile = db.Column(db.String(64), nullable=True)
+    exit_code = db.Column(db.Integer, nullable=True)
+    fallback_from = db.Column(db.String(64), nullable=True)
+    stdout_tail = db.Column(db.Text, nullable=True)
+    stderr_tail = db.Column(db.Text, nullable=True)
+    runtime_run_id = db.Column(db.String(36), nullable=True)
 
     def to_dict(self):
         return {
@@ -661,6 +673,16 @@ class HeartbeatRun(db.Model):
             "prompt_preview": self.prompt_preview,
             "error": self.error,
             "triggered_by": self.triggered_by,
+            "decision_action": self.decision_action,
+            "decision_json": self.decision_json,
+            "provider": self.provider,
+            "requested_profile": self.requested_profile,
+            "resolved_profile": self.resolved_profile,
+            "exit_code": self.exit_code,
+            "fallback_from": self.fallback_from,
+            "stdout_tail": self.stdout_tail,
+            "stderr_tail": self.stderr_tail,
+            "runtime_run_id": self.runtime_run_id,
         }
 
 

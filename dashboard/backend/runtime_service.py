@@ -11,6 +11,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from secret_redaction import redact_secrets
+
 WORKSPACE = Path(__file__).resolve().parents[2]
 
 
@@ -99,9 +101,11 @@ class RuntimeService:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=WORKSPACE, env=env, start_new_session=True)
             stdout, stderr = process.communicate(timeout=request.timeout_seconds)
             duration_ms = int((time.monotonic() - started) * 1000)
+            safe_stdout = redact_secrets(stdout)
+            safe_stderr = redact_secrets(stderr, limit=2000)
             if process.returncode:
-                return RuntimeResult("failed", provider_id, request.requested_profile, profile, request.agent_slug, stdout or "", (stderr or f"exit code {process.returncode}")[:2000], process.returncode, duration_ms, fallback_from=fallback_from)
-            return RuntimeResult("succeeded", provider_id, request.requested_profile, profile, request.agent_slug, stdout or "", exit_code=0, duration_ms=duration_ms, fallback_from=fallback_from)
+                return RuntimeResult("failed", provider_id, request.requested_profile, profile, request.agent_slug, safe_stdout, safe_stderr or f"exit code {process.returncode}", process.returncode, duration_ms, fallback_from=fallback_from)
+            return RuntimeResult("succeeded", provider_id, request.requested_profile, profile, request.agent_slug, safe_stdout, exit_code=0, duration_ms=duration_ms, fallback_from=fallback_from)
         except subprocess.TimeoutExpired:
             if process is not None:
                 try:
@@ -111,7 +115,7 @@ class RuntimeService:
                 process.communicate(timeout=5)
             return RuntimeResult("timeout", provider_id, request.requested_profile, profile, request.agent_slug, error=f"Killed after {request.timeout_seconds}s timeout", exit_code=-1, duration_ms=int((time.monotonic() - started) * 1000), fallback_from=fallback_from)
         except Exception as exc:
-            return RuntimeResult("failed", provider_id, request.requested_profile, profile, request.agent_slug, error=str(exc), duration_ms=int((time.monotonic() - started) * 1000), fallback_from=fallback_from)
+            return RuntimeResult("failed", provider_id, request.requested_profile, profile, request.agent_slug, error=redact_secrets(exc, limit=2000), duration_ms=int((time.monotonic() - started) * 1000), fallback_from=fallback_from)
 
     def invoke(self, request: RuntimeRequest) -> RuntimeResult:
         provider_id, provider, config = self._provider()

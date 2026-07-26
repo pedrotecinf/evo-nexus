@@ -26,7 +26,7 @@ The native Hermes API server is separate from the dashboard and is disabled by d
 
 ```env
 EVONEXUS_HERMES_API_ENABLED=true
-EVONEXUS_HERMES_API_KEY=<independent-high-entropy-key>
+EVONEXUS_HERMES_API_KEY=[REDACTED]
 ```
 
 Startup fails closed when the API server is enabled without a key.
@@ -39,7 +39,7 @@ Startup fails closed when the API server is enabled without a key.
 4. Open EvoNexus, navigate to **Integrations → Network**, and submit an ephemeral/reusable Tailscale auth key according to your tailnet policy.
 5. Do not publish port `9119` to the public internet. Reach it through the Tailscale IP or MagicDNS name.
 
-The Swarm dashboard image starts `tailscaled` in userspace-networking mode. Non-Swarm/custom images must provide a compatible `tailscale` CLI and daemon/socket.
+The supplied Swarm dashboard image starts `tailscaled` in userspace-networking mode. A successful connect configures `tailscale serve` as a tailnet-only TCP forward from port `9119` to `127.0.0.1:9119`; the API fails closed and disconnects when that forward cannot be configured. Non-standard images must provide a compatible `tailscale` CLI and daemon/socket. The supplied Compose and Swarm manifests mount `evonexus_tailscale_state` at `/var/lib/tailscale`.
 
 ## Acceptance checks
 

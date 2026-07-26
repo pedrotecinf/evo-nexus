@@ -71,12 +71,19 @@ _HOP_BY_HOP = frozenset(
     }
 )
 
+# Dashboard credentials authenticate the client to EvoNexus. They must never
+# cross the trust boundary into the proxied Hermes process.
+_DASHBOARD_CREDENTIAL_HEADERS = frozenset(
+    {"authorization", "cookie", "x-csrf-token", "x-csrftoken"}
+)
+
 # Headers that block iframe embedding — strip from upstream responses
 _IFRAME_BLOCK = frozenset(
     {
         "x-frame-options",
         "content-security-policy",
         "content-security-policy-report-only",
+        "set-cookie",
     }
 )
 
@@ -133,7 +140,12 @@ _SHIM = """<script>(function(){
 
 
 def _forward_headers(src: dict[str, str]) -> dict[str, str]:
-    return {k: v for k, v in src.items() if k.lower() not in _HOP_BY_HOP}
+    return {
+        k: v
+        for k, v in src.items()
+        if k.lower() not in _HOP_BY_HOP
+        and k.lower() not in _DASHBOARD_CREDENTIAL_HEADERS
+    }
 
 
 # ---------------------------------------------------------------------------

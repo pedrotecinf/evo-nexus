@@ -17,7 +17,6 @@ def app(monkeypatch):
     monkeypatch.setenv("HERMES_CONTROL_API_TOKEN", "control-test-token")
     monkeypatch.setenv("HERMES_CONTROL_API_SCOPES", "health:read,projects:read,tickets:read,tickets:write,comments:write,evidence:write,goals:read,goals:write,heartbeats:read,heartbeats:write,heartbeats:run,scheduled_tasks:read,scheduled_tasks:write,scheduled_tasks:run,routines:read,routines:run")
     import models
-    importlib.reload(models)
     import routes.control_api as control_api
     importlib.reload(control_api)
     app = Flask(__name__)
@@ -102,6 +101,74 @@ def test_ticket_timeline_checkout_release_and_conflict(client):
     released = client.post(f"/api/control/v1/tickets/{ticket_id}/release", headers=headers(**{"Idempotency-Key": "release-1"}), json={"agent": "zara-cs"})
     assert released.status_code == 200
     assert released.json["data"]["locked_by"] is None
+
+
+@pytest.mark.parametrize("lock_timeout", [True, "1800", 0, -1, 86401])
+def test_checkout_rejects_invalid_lock_timeout(client, lock_timeout):
+    created = client.post(
+        "/api/control/v1/tickets",
+        headers=headers(**{"Idempotency-Key": f"timeout-ticket-{lock_timeout}"}),
+        json={"title": "Task"},
+    )
+    ticket_id = created.json["data"]["id"]
+
+    response = client.post(
+        f"/api/control/v1/tickets/{ticket_id}/checkout",
+        headers=headers(**{"Idempotency-Key": f"timeout-lock-{lock_timeout}"}),
+        json={"agent": "zara-cs", "lock_timeout_seconds": lock_timeout},
+    )
+
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_lock_timeout_seconds"
+
+
+def test_routine_reserves_idempotency_before_starting_subprocess(
+    client, monkeypatch, tmp_path
+):
+    import subprocess
+    import routes._helpers as helpers
+    from models import ControlApiIdempotency
+
+    routines_dir = tmp_path / "ADWs" / "routines"
+    routines_dir.mkdir(parents=True)
+    (routines_dir / "daily.py").write_text("print('ok')\n")
+    monkeypatch.setattr(helpers, "WORKSPACE", tmp_path)
+    monkeypatch.setattr(
+        helpers,
+        "discover_routines",
+        lambda: {"daily": {"script": "daily.py"}},
+    )
+    secret = "routine-secret-value"
+    monkeypatch.setenv("ROUTINE_API_KEY", secret)
+
+    def fake_run(*args, **kwargs):
+        reservation = ControlApiIdempotency.query.filter_by(
+            operation="run_routine:daily", key="routine-once"
+        ).one()
+        assert reservation.response_status == 409
+        assert reservation.response_json == '{"error": "request_in_progress"}'
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout=f"ok {secret}", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    response = client.post(
+        "/api/control/v1/routines/daily/run",
+        headers=headers(**{"Idempotency-Key": "routine-once"}),
+        json={},
+    )
+
+    assert response.status_code == 200
+    assert secret not in response.get_data(as_text=True)
+    assert "[REDACTED]" in response.get_data(as_text=True)
+    replay = client.post(
+        "/api/control/v1/routines/daily/run",
+        headers=headers(**{"Idempotency-Key": "routine-once"}),
+        json={},
+    )
+    assert replay.status_code == 200
+    assert replay.json["data"] == response.json["data"]
 
 
 def test_comments_evidence_and_validation(client):
@@ -219,6 +286,89 @@ def test_heartbeat_run_requires_scope(client, monkeypatch):
     assert resp.status_code == 403
 
 
+def test_heartbeat_run_reserves_idempotency_before_dispatch(client, app, monkeypatch):
+    import heartbeat_dispatcher
+    from models import Heartbeat, db
+
+    with app.app_context():
+        db.session.add(
+            Heartbeat(
+                id="run-hb",
+                agent="zara-cs",
+                interval_seconds=3600,
+                decision_prompt="Test",
+                enabled=True,
+            )
+        )
+        db.session.commit()
+
+    dispatch_calls = []
+    request_headers = headers(**{"Idempotency-Key": "hb-run-1"})
+
+    def fake_dispatch(heartbeat_id, trigger):
+        concurrent = client.post(
+            "/api/control/v1/heartbeats/run-hb/run", headers=request_headers, json={}
+        )
+        assert concurrent.status_code == 409
+        assert concurrent.json["data"]["error"] == "request_in_progress"
+        dispatch_calls.append((heartbeat_id, trigger))
+        return True, "run-1"
+
+    monkeypatch.setattr(heartbeat_dispatcher, "dispatch", fake_dispatch)
+
+    created = client.post(
+        "/api/control/v1/heartbeats/run-hb/run", headers=request_headers, json={}
+    )
+    replayed = client.post(
+        "/api/control/v1/heartbeats/run-hb/run", headers=request_headers, json={}
+    )
+
+    assert created.status_code == 202, created.json
+    assert replayed.status_code == 202
+    assert created.json["data"] == replayed.json["data"]
+    assert dispatch_calls == [("run-hb", "manual")]
+
+
+def test_heartbeat_run_failure_is_redacted_and_replayed(client, app, monkeypatch):
+    import heartbeat_dispatcher
+    from models import Heartbeat, db
+
+    with app.app_context():
+        db.session.add(
+            Heartbeat(
+                id="failing-hb",
+                agent="zara-cs",
+                interval_seconds=3600,
+                decision_prompt="Test",
+                enabled=True,
+            )
+        )
+        db.session.commit()
+
+    dispatch_calls = []
+    secret = "token=" + "heartbeat-secret"
+
+    def failing_dispatch(heartbeat_id, trigger):
+        dispatch_calls.append((heartbeat_id, trigger))
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(heartbeat_dispatcher, "dispatch", failing_dispatch)
+    request_headers = headers(**{"Idempotency-Key": "hb-run-failure-1"})
+
+    failed = client.post(
+        "/api/control/v1/heartbeats/failing-hb/run", headers=request_headers, json={}
+    )
+    replayed = client.post(
+        "/api/control/v1/heartbeats/failing-hb/run", headers=request_headers, json={}
+    )
+
+    assert failed.status_code == 500
+    assert replayed.status_code == 500
+    assert secret not in failed.get_data(as_text=True)
+    assert failed.json["data"] == replayed.json["data"]
+    assert dispatch_calls == [("failing-hb", "manual")]
+
+
 def test_scheduled_task_cancel_and_transitions(client, app):
     from models import ScheduledTask, db
     from datetime import datetime, timezone
@@ -255,6 +405,9 @@ def test_scheduled_task_run_now(client, app):
     resp = client.post(f"/api/control/v1/scheduled-tasks/{task_id}/run", headers=h, json={})
     assert resp.status_code == 202
     assert resp.json["data"]["status"] == "pending"
+    with app.app_context():
+        queued = ScheduledTask.query.get(task_id)
+        assert queued.scheduled_at.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc)
 
 
 def test_routines_list(client, monkeypatch):

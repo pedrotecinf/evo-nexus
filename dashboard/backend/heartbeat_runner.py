@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import text
+from secret_redaction import redact_secrets
 
 # Workspace root
 WORKSPACE = Path(__file__).resolve().parent.parent.parent
@@ -482,14 +483,14 @@ def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str 
             "cu": result.get("cost_usd"),
             "st": result["status"],
             "pp": prompt_preview[:1000] if prompt_preview else None,
-            "err": result.get("error"),
+            "err": redact_secrets(result.get("error"), limit=2000) or None,
             "tby": triggered_by,
             "decision_action": result.get("decision_action"),
-            "decision_json": json.dumps(decision_json) if decision_json else None,
+            "decision_json": redact_secrets(json.dumps(decision_json)) if decision_json else None,
             "provider": result.get("provider"),
             "resolved_profile": result.get("resolved_profile"),
-            "stdout_tail": (result.get("output") or "")[-2000:] or None,
-            "stderr_tail": (result.get("error") or "")[-2000:] or None,
+            "stdout_tail": redact_secrets(result.get("output"))[-2000:] or None,
+            "stderr_tail": redact_secrets(result.get("error"))[-2000:] or None,
             "runtime_run_id": result.get("runtime_run_id"),
         },
     )
@@ -522,7 +523,7 @@ def step8_persist(run_id: str, heartbeat_id: str, result: dict, trigger_id: str 
             "cost_usd": result.get("cost_usd"),
             "triggered_by": triggered_by,
             "ts": now,
-            "error": result.get("error"),
+            "error": redact_secrets(result.get("error"), limit=2000) or None,
         }
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")

@@ -7,6 +7,8 @@ import subprocess
 from flask import Blueprint, jsonify, request, abort
 from flask_login import current_user, login_required
 
+from secret_redaction import redact_secrets
+
 log = logging.getLogger(__name__)
 bp = Blueprint("tailscale", __name__)
 
@@ -24,7 +26,30 @@ def _require_manage() -> None:
 
 
 def _safe_error(detail: str) -> str:
-    return _AUTH_KEY_IN_TEXT_RE.sub("[REDACTED]", detail).strip()[:500]
+    return redact_secrets(_AUTH_KEY_IN_TEXT_RE.sub("[REDACTED]", detail), limit=500).strip()
+
+
+def _hermes_remote_auth_configured() -> bool:
+    return bool(
+        os.environ.get("EVONEXUS_HERMES_USERNAME", "").strip()
+        and os.environ.get("EVONEXUS_HERMES_PASSWORD", "").strip()
+    )
+
+
+def _enable_hermes_serve():
+    if not _hermes_remote_auth_configured():
+        return subprocess.CompletedProcess(
+            args=[_TAILSCALE_BINARY, "serve"],
+            returncode=1,
+            stdout="",
+            stderr="Hermes remote authentication is not configured",
+        )
+    return _tailscale(
+        "serve",
+        "--bg",
+        "--tcp=9119",
+        "tcp://127.0.0.1:9119",
+    )
 
 
 def _tailscale(*args, timeout=15) -> subprocess.CompletedProcess:
@@ -44,7 +69,7 @@ def _get_status() -> dict:
     try:
         result = _tailscale("status", "--json")
         if result.returncode != 0:
-            return {"connected": False, "error": result.stderr.strip() or "not running"}
+            return {"connected": False, "error": _safe_error(result.stderr) or "not running"}
         import json
 
         data = json.loads(result.stdout)
@@ -64,8 +89,9 @@ def _get_status() -> dict:
     except FileNotFoundError:
         return {"connected": False, "error": "tailscale binary not found"}
     except Exception as exc:
-        log.warning("tailscale status error: %s", exc)
-        return {"connected": False, "error": str(exc)}
+        safe_error = _safe_error(str(exc))
+        log.warning("tailscale status error: %s", safe_error)
+        return {"connected": False, "error": safe_error}
 
 
 @bp.route("/api/tailscale/status")
@@ -83,6 +109,8 @@ def tailscale_connect():
     Body: {auth_key: str}
     """
     _require_manage()
+    if not _hermes_remote_auth_configured():
+        abort(503, description="Hermes remote authentication is required for Tailscale access")
     data = request.get_json(silent=True) or {}
     auth_key = (data.get("auth_key") or "").strip()
 
@@ -96,14 +124,19 @@ def tailscale_connect():
     if not _HOSTNAME_RE.fullmatch(hostname):
         abort(500, description="EVONEXUS_TAILSCALE_HOSTNAME is invalid")
 
-    # Check if already connected
+    # Check if already connected, but still repair the Serve mapping. This
+    # supports upgrades from versions that connected the node without exposing
+    # the loopback-only Hermes UI from userspace-networking mode.
     current = _get_status()
     if current.get("connected"):
+        serve_result = _enable_hermes_serve()
+        if serve_result.returncode != 0:
+            abort(502, description=f"Failed to expose Hermes UI: {_safe_error(serve_result.stderr)}")
         return jsonify({"connected": True, "ip": current.get("ip"), "already": True})
 
     # Attempt connection.
-    # Daemon runs with --tun=userspace-networking (no NET_ADMIN available under
-    # Dokploy), so --accept-routes is omitted: in userspace mode the node cannot
+    # Daemon runs with --tun=userspace-networking (without NET_ADMIN), so
+    # --accept-routes is omitted: in userspace mode the node cannot
     # install kernel routes / act as a subnet router. --accept-dns keeps MagicDNS.
     result = _tailscale(
         "up",
@@ -121,6 +154,15 @@ def tailscale_connect():
     new_status = _get_status()
     if not new_status.get("connected"):
         abort(502, description="Connection command succeeded but Tailscale is not connected")
+
+    # Userspace networking has no kernel TUN interface. Publish the standalone
+    # Hermes HTTP listener explicitly over the tailnet instead of claiming that
+    # binding 0.0.0.0 alone makes the port reachable.
+    serve = _enable_hermes_serve()
+    if serve.returncode != 0:
+        log.error("tailscale serve failed: %s", _safe_error(serve.stderr))
+        _tailscale("down")
+        abort(502, description="Tailscale connected but Hermes exposure failed")
 
     from models import audit
 
@@ -163,7 +205,7 @@ def tailscale_whoami():
     try:
         result = _tailscale("whoami", "--json")
         if result.returncode != 0:
-            abort(502, description=result.stderr.strip())
+            abort(502, description=_safe_error(result.stderr))
         import json
 
         return jsonify(json.loads(result.stdout))

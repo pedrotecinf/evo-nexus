@@ -8,6 +8,10 @@ on:
       - "ADWs/**"
       - "config/**"
       - "tests/**"
+      - "Dockerfile*"
+      - "docker-compose*.yml"
+      - "evonexus.stack.yml"
+      - "start-dashboard.sh"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ci.yml"
@@ -18,6 +22,10 @@ on:
       - "ADWs/**"
       - "config/**"
       - "tests/**"
+      - "Dockerfile*"
+      - "docker-compose*.yml"
+      - "evonexus.stack.yml"
+      - "start-dashboard.sh"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/ci.yml"
@@ -47,7 +55,23 @@ jobs:
         run: uv sync --frozen --dev
 
       - name: Run backend tests
-        run: uv run python -m pytest tests/backend/test_auth_security.py tests/backend/test_health_routes.py tests/backend/test_hermes_profile.py
+        run: >-
+          uv run python -m pytest -q
+          tests/backend
+          tests/db
+          tests/heartbeats
+          tests/test_deployment_images.py
+          ADWs/test_hermes_integration.py
+          ADWs/test_runtime_policy.py
+
+      - name: Validate deployment manifests
+        env:
+          EVONEXUS_IMAGE_TAG: sha-ci
+        run: |
+          bash -n start-dashboard.sh
+          docker compose -f docker-compose.hub.yml config >/dev/null
+          docker compose -f docker-compose.proxy.yml config >/dev/null
+          docker stack config -c evonexus.stack.yml >/dev/null
 
   terminal-server:
     runs-on: ubuntu-latest

@@ -16,10 +16,11 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 @pytest.fixture
 def app(monkeypatch):
+    monkeypatch.setenv("EVONEXUS_HERMES_USERNAME", "hermes-test-user")
+    monkeypatch.setenv("EVONEXUS_HERMES_PASSWORD", "hermes-test-password")
     import models as models_module
     import routes.tailscale as tailscale_module
 
-    importlib.reload(models_module)
     importlib.reload(tailscale_module)
 
     app = Flask(__name__)
@@ -106,6 +107,26 @@ def test_connect_requires_config_manage_permission(client, app):
     assert response.status_code == 403
 
 
+def test_connect_fails_closed_without_hermes_remote_auth(client, app, monkeypatch):
+    _, tailscale = app
+    _login(client, "admin")
+    calls = []
+    monkeypatch.delenv("EVONEXUS_HERMES_USERNAME")
+    monkeypatch.delenv("EVONEXUS_HERMES_PASSWORD")
+    monkeypatch.setattr(
+        tailscale,
+        "_tailscale",
+        lambda *args, **kwargs: calls.append(args) or _completed(),
+    )
+
+    response = client.post(
+        "/api/tailscale/connect", json={"auth_key": "tskey-auth-example"}
+    )
+
+    assert response.status_code == 503
+    assert calls == []
+
+
 def test_connect_uses_configured_hostname(client, app, monkeypatch):
     _, tailscale = app
     _login(client, "admin")
@@ -134,6 +155,31 @@ def test_connect_uses_configured_hostname(client, app, monkeypatch):
 
     assert response.status_code == 200
     assert ("up", "--authkey=tskey-auth-example", "--accept-dns", "--hostname=nexus-node", "--reset") in calls
+    assert ("serve", "--bg", "--tcp=9119", "tcp://127.0.0.1:9119") in calls
+
+
+def test_connect_repairs_hermes_serve_on_an_already_connected_node(client, app, monkeypatch):
+    _, tailscale = app
+    _login(client, "admin")
+    calls = []
+    monkeypatch.setattr(
+        tailscale,
+        "_get_status",
+        lambda: {"connected": True, "ip": "100.64.0.1"},
+    )
+    monkeypatch.setattr(
+        tailscale,
+        "_tailscale",
+        lambda *args, **kwargs: calls.append(args) or _completed(),
+    )
+
+    response = client.post(
+        "/api/tailscale/connect", json={"auth_key": "tskey-auth-example"}
+    )
+
+    assert response.status_code == 200
+    assert ("up", "--authkey=tskey-auth-example") not in calls
+    assert ("serve", "--bg", "--tcp=9119", "tcp://127.0.0.1:9119") in calls
 
 
 def test_disconnect_invokes_plain_down(client, app, monkeypatch):
@@ -157,7 +203,7 @@ def test_disconnect_invokes_plain_down(client, app, monkeypatch):
 def test_connect_failure_never_returns_or_logs_auth_key(client, app, monkeypatch, caplog):
     _, tailscale = app
     _login(client, "admin")
-    key = "tskey-auth-super-secret"
+    key = "tskey-auth-" + "test-value"
     monkeypatch.setattr(tailscale, "_get_status", lambda: {"connected": False})
     monkeypatch.setattr(
         tailscale,

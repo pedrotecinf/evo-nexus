@@ -175,9 +175,8 @@ fi
 
 # Start tailscaled if installed (for Tailscale VPN integration).
 # Uses --tun=userspace-networking so the daemon needs NO NET_ADMIN cap and
-# NO /dev/net/tun device — required because Dokploy/Docker Swarm does not
-# pass through container capabilities/devices from docker-compose.yml, and the
-# Dokploy UI has no fields for CapAdd/Devices on this service.
+# NO /dev/net/tun device, which keeps the dashboard compatible with restricted
+# container runtimes that do not grant network-administration capabilities.
 # Trade-off: the node appears in the tailnet and is reachable via MagicDNS
 # (inbound TCP works), but it CANNOT act as a subnet router / exit node.
 TAILSCALED_PID=""
@@ -190,6 +189,10 @@ if command -v tailscaled &>/dev/null; then
 else
     echo "[start-dashboard] tailscaled not found, skipping VPN integration"
 fi
+
+# Apply schema changes before any application process can use the database.
+echo "[start-dashboard] applying database migrations"
+(cd /workspace/dashboard/alembic && uv run python -m alembic upgrade head)
 
 # Start Flask in the background
 uv run python /workspace/dashboard/backend/app.py &

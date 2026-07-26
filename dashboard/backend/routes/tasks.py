@@ -14,6 +14,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user
 
 from models import RuntimeRunApproval, RuntimeRunEvidence, ScheduledTask, audit, db, has_permission
+from secret_redaction import redact_secrets
 
 TASK_TIMEOUT_SECONDS = 15 * 60
 _RUNNING_PROCESSES: dict[int, subprocess.Popen] = {}
@@ -291,7 +292,7 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
                 result = run_skill(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile, on_process=track_process) if task.type == "skill" else run_claude(task.payload, log_name=f"task-{task.id}", timeout=TASK_TIMEOUT_SECONDS, agent=task.agent, profile=profile, on_process=track_process)
             finally:
                 sys.path.pop(0)
-            task.result_summary = (result.get("stdout") or "")[:5000]
+            task.result_summary = redact_secrets(result.get("stdout"), limit=5000)
             db.session.refresh(task)
             if task.status == "cancelled":
                 transition(run, "cancelled")
@@ -302,7 +303,7 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
                 transition(run, "succeeded", summary=task.result_summary, exit_code=result.get("returncode", 0))
             else:
                 task.status = "failed"
-                task.error = (result.get("stderr") or "Task failed")[:2000]
+                task.error = redact_secrets(result.get("stderr") or "Task failed", limit=2000)
                 transition(run, "failed", summary=task.result_summary, error=task.error, exit_code=result.get("returncode", -1))
         elif task.type == "script":
             script = (Path(__file__).resolve().parents[3] / "ADWs" / "routines" / task.payload).resolve()
@@ -312,7 +313,7 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
             process = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
             _RUNNING_PROCESSES[task.id] = process
             stdout, stderr = process.communicate(timeout=TASK_TIMEOUT_SECONDS)
-            task.result_summary = (stdout or "")[:5000]
+            task.result_summary = redact_secrets(stdout, limit=5000)
             db.session.refresh(task)
             if task.status == "cancelled":
                 transition(run, "cancelled")
@@ -321,7 +322,7 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
                 transition(run, "succeeded", summary=task.result_summary, exit_code=0)
             else:
                 task.status = "failed"
-                task.error = (stderr or "Script failed")[:2000]
+                task.error = redact_secrets(stderr or "Script failed", limit=2000)
                 transition(run, "failed", summary=task.result_summary, error=task.error, exit_code=process.returncode)
     except subprocess.TimeoutExpired:
         process = _RUNNING_PROCESSES.get(task_id)
@@ -331,7 +332,7 @@ def _execute_task(task_id: int, *, already_claimed: bool = False):
         if run:
             transition(run, "failed", error=task.error, exit_code=-1)
     except Exception as exc:
-        task.status, task.error = "failed", str(exc)[:2000]
+        task.status, task.error = "failed", redact_secrets(exc, limit=2000)
         if run and run.status not in ("failed", "succeeded", "cancelled"):
             transition(run, "failed", error=task.error, exit_code=-1)
     finally:

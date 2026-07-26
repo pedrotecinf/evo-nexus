@@ -21,10 +21,29 @@ def test_ecc_catalog_allowlist():
         resolve_workflow("bug", "../../etc/passwd")
 
 
+def test_heartbeat_models_match_runtime_migration():
+    from models import Heartbeat, HeartbeatRun
+
+    assert "handler" in Heartbeat.__table__.columns
+    expected_run_columns = {
+        "decision_action",
+        "decision_json",
+        "provider",
+        "requested_profile",
+        "resolved_profile",
+        "exit_code",
+        "fallback_from",
+        "stdout_tail",
+        "stderr_tail",
+        "runtime_run_id",
+    }
+    assert expected_run_columns <= set(HeartbeatRun.__table__.columns.keys())
+
+
 @pytest.fixture
 def app():
     import models
-    importlib.reload(models)
+
     app = Flask(__name__)
     app.config.update(SQLALCHEMY_DATABASE_URI="sqlite:///:memory:", SQLALCHEMY_TRACK_MODIFICATIONS=False)
     models.db.init_app(app)
