@@ -177,7 +177,7 @@ export default function TailscaleCard() {
               value={authKey}
               onChange={(e) => setAuthKey(e.target.value)}
               className={`${inp} flex-1 font-mono`}
-              placeholder="tskey-auth-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              placeholder="tskey-auth-[REDACTED]"
               onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
               autoComplete="off"
             />
