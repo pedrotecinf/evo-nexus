@@ -297,6 +297,28 @@ def test_step5_checkout_with_no_task_always_succeeds():
     assert result is True
 
 
+def test_step5_checkout_persists_configured_lock_timeout():
+    from heartbeat_runner import step5_atomic_checkout
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE tickets ("
+        "id TEXT PRIMARY KEY, locked_at TEXT, locked_by TEXT, "
+        "lock_timeout_seconds INTEGER)"
+    )
+    conn.execute("INSERT INTO tickets (id) VALUES ('ticket-1')")
+    conn.commit()
+
+    acquired = step5_atomic_checkout("ticket-1", "run-123", 7200, conn)
+    locked_by, lock_timeout = conn.execute(
+        "SELECT locked_by, lock_timeout_seconds FROM tickets WHERE id = 'ticket-1'"
+    ).fetchone()
+
+    assert acquired is True
+    assert locked_by == "run-123"
+    assert lock_timeout == 7200
+
+
 # ---------------------------------------------------------------------------
 # JSONL log
 # ---------------------------------------------------------------------------

@@ -213,9 +213,17 @@ def step5_atomic_checkout(task_id: str | None, run_id: str, lock_timeout: int, c
         now = _now_iso()
         cursor = _execute(
             conn,
-            """UPDATE tickets SET locked_at = :now, locked_by = :run_id
+            """UPDATE tickets
+               SET locked_at = :now,
+                   locked_by = :run_id,
+                   lock_timeout_seconds = :lock_timeout
                WHERE id = :task_id AND locked_at IS NULL""",
-            {"now": now, "run_id": run_id, "task_id": task_id},
+            {
+                "now": now,
+                "run_id": run_id,
+                "lock_timeout": lock_timeout,
+                "task_id": task_id,
+            },
         )
         conn.commit()
         return cursor.rowcount == 1
