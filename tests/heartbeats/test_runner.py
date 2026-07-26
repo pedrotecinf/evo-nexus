@@ -62,7 +62,14 @@ def tmp_db(tmp_path):
             status TEXT NOT NULL DEFAULT 'running',
             prompt_preview TEXT,
             error TEXT,
-            triggered_by TEXT
+            triggered_by TEXT,
+            decision_action TEXT,
+            decision_json TEXT,
+            provider TEXT,
+            resolved_profile TEXT,
+            stdout_tail TEXT,
+            stderr_tail TEXT,
+            runtime_run_id TEXT
         );
         CREATE TABLE heartbeat_triggers (
             id TEXT PRIMARY KEY,
@@ -286,7 +293,7 @@ def test_step5_checkout_with_no_task_always_succeeds():
     conn.execute("CREATE TABLE tasks (id TEXT, locked_at TEXT, locked_by TEXT, status TEXT)")
     conn.commit()
 
-    result = step5_atomic_checkout(None, "run-123", conn)
+    result = step5_atomic_checkout(None, "run-123", 1800, conn)
     assert result is True
 
 

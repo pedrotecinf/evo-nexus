@@ -40,6 +40,9 @@ RUN npm install -g \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
+# Tailscale CLI (for VPN integration)
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
 ENV TZ=America/Sao_Paulo
 RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo "${TZ}" > /etc/timezone
 
