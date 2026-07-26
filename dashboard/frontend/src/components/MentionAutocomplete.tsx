@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import {
+  DEFAULT_MENTION_MENU_HEIGHT,
   filterMentionAgents,
+  mentionMenuGeometry,
   type MentionAgent,
   type MentionContext,
+  type MentionMenuGeometry,
 } from '../lib/mentionAutocomplete'
 
 interface Props {
@@ -17,21 +20,6 @@ interface Props {
   listboxId: string
 }
 
-export interface MentionMenuGeometry {
-  direction: 'above' | 'below'
-  maxHeight: number
-}
-
-const VIEWPORT_GUTTER = 12
-const PREFERRED_HEIGHT = 224
-
-export function mentionMenuGeometry(rect: DOMRect, viewportHeight = window.innerHeight): MentionMenuGeometry {
-  const above = Math.max(0, rect.top - VIEWPORT_GUTTER)
-  const below = Math.max(0, viewportHeight - rect.bottom - VIEWPORT_GUTTER)
-  const direction = below >= PREFERRED_HEIGHT || below >= above ? 'below' : 'above'
-  const available = direction === 'below' ? below : above
-  return { direction, maxHeight: Math.max(0, Math.min(PREFERRED_HEIGHT, available)) }
-}
 
 export default function MentionAutocomplete({
   agents,
@@ -45,7 +33,7 @@ export default function MentionAutocomplete({
   listboxId,
 }: Props) {
   const listboxRef = useRef<HTMLDivElement>(null)
-  const [geometry, setGeometry] = useState<MentionMenuGeometry>({ direction: 'below', maxHeight: PREFERRED_HEIGHT })
+  const [geometry, setGeometry] = useState<MentionMenuGeometry>({ direction: 'below', maxHeight: DEFAULT_MENTION_MENU_HEIGHT })
   const options = agents && context ? filterMentionAgents(agents, context.query, assignee) : []
 
   useEffect(() => {

@@ -10,6 +10,24 @@ export interface MentionContext {
   query: string
 }
 
+export interface MentionMenuGeometry {
+  direction: 'above' | 'below'
+  maxHeight: number
+}
+
+const VIEWPORT_GUTTER = 12
+const PREFERRED_MENU_HEIGHT = 224
+
+export function mentionMenuGeometry(rect: DOMRect, viewportHeight = window.innerHeight): MentionMenuGeometry {
+  const above = Math.max(0, rect.top - VIEWPORT_GUTTER)
+  const below = Math.max(0, viewportHeight - rect.bottom - VIEWPORT_GUTTER)
+  const direction = below >= PREFERRED_MENU_HEIGHT || below >= above ? 'below' : 'above'
+  const available = direction === 'below' ? below : above
+  return { direction, maxHeight: Math.max(0, Math.min(PREFERRED_MENU_HEIGHT, available)) }
+}
+
+export const DEFAULT_MENTION_MENU_HEIGHT = PREFERRED_MENU_HEIGHT
+
 export function findMentionContext(value: string, caret: number): MentionContext | null {
   const before = value.slice(0, caret)
   const match = before.match(/(^|\s)@([\w-]*)$/)

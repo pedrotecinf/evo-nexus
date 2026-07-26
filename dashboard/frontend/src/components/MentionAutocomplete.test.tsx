@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import MentionAutocomplete, { mentionMenuGeometry } from './MentionAutocomplete'
+import MentionAutocomplete from './MentionAutocomplete'
+import { mentionMenuGeometry } from '../lib/mentionAutocomplete'
 
 const context = { start: 0, end: 1, query: '' }
 const agents = Array.from({ length: 12 }, (_, index) => ({ name: `agent-${index}`, description: 'Agente', locked: false }))
