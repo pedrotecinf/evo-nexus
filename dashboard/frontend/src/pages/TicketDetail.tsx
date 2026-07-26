@@ -197,14 +197,16 @@ export default function TicketDetail() {
     return items.sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
 
-  const handleAddComment = async (body: string) => {
-    if (!body.trim() || !id) return
+  const handleAddComment = async (body: string): Promise<boolean> => {
+    if (!body.trim() || !id) return false
     setSubmitting(true)
     try {
       await api.post(`/tickets/${id}/comments`, { body: body.trim() })
       fetchTicket()
+      return true
     } catch (err: any) {
       toast.error('Falha ao adicionar comentário', err?.message)
+      return false
     } finally {
       setSubmitting(false)
     }

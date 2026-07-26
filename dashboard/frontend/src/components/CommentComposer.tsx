@@ -6,7 +6,7 @@ import { filterMentionAgents, findMentionContext, insertMention, type MentionAge
 interface Props {
   assignee: string | null
   submitting: boolean
-  onSubmit: (body: string) => void
+  onSubmit: (body: string) => Promise<boolean>
 }
 
 export default function CommentComposer({ assignee, submitting, onSubmit }: Props) {
@@ -31,17 +31,6 @@ export default function CommentComposer({ assignee, submitting, onSubmit }: Prop
   useEffect(() => {
     if (context) setIndex(0)
   }, [context?.start, context?.query])
-
-  useEffect(() => {
-    if (!context) return
-    const handleScroll = () => setContext(current => current ? { ...current } : current)
-    window.addEventListener('scroll', handleScroll, true)
-    window.addEventListener('resize', handleScroll)
-    return () => {
-      window.removeEventListener('scroll', handleScroll, true)
-      window.removeEventListener('resize', handleScroll)
-    }
-  }, [context])
 
   const updateContext = (value: string, caret: number) => {
     setBody(value)
@@ -71,7 +60,17 @@ export default function CommentComposer({ assignee, submitting, onSubmit }: Prop
     if ((event.key === 'Enter' || event.key === 'Tab') && selected) { event.preventDefault(); select(selected) }
   }
 
-  return <form onSubmit={event => { event.preventDefault(); if (body.trim()) onSubmit(body.trim()) }}>
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (submitting || !body.trim()) return
+    if (await onSubmit(body.trim())) {
+      setBody('')
+      setContext(null)
+      setIndex(0)
+    }
+  }
+
+  return <form onSubmit={submit}>
     <div className="relative">
       <textarea ref={textareaRef} role="combobox" aria-autocomplete="list" aria-expanded={!!context} aria-controls="mention-suggestions" aria-activedescendant={selected ? `mention-suggestions-${index}` : undefined} className="w-full bg-[#0C111D] border border-[#21262d] rounded-lg px-3 py-2 text-sm text-[#e6edf3] placeholder-[#667085] focus:outline-none focus:border-[#00FFA7]/50 resize-none transition-colors" placeholder="Add a comment... Use @agent-slug to mention an agent" rows={3} value={body} onChange={event => updateContext(event.target.value, event.target.selectionStart ?? event.target.value.length)} onClick={event => setContext(findMentionContext(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length))} onKeyDown={keyDown} onBlur={event => requestAnimationFrame(() => { if (document.activeElement !== event.currentTarget) setContext(null) })} />
       <MentionAutocomplete agents={agents} error={agentError} context={context} assignee={assignee} selectedIndex={index} onSelect={select} onSelectedIndexChange={setIndex} anchorRef={textareaRef} listboxId="mention-suggestions" />

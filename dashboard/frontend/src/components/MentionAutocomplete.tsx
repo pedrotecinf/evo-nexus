@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import {
   filterMentionAgents,
   type MentionAgent,
@@ -44,6 +44,7 @@ export default function MentionAutocomplete({
   anchorRef,
   listboxId,
 }: Props) {
+  const listboxRef = useRef<HTMLDivElement>(null)
   const [geometry, setGeometry] = useState<MentionMenuGeometry>({ direction: 'below', maxHeight: PREFERRED_HEIGHT })
   const options = agents && context ? filterMentionAgents(agents, context.query, assignee) : []
 
@@ -60,9 +61,15 @@ export default function MentionAutocomplete({
     }
   }, [anchorRef, context])
 
+  useEffect(() => {
+    const option = listboxRef.current?.querySelector<HTMLElement>(`#${listboxId}-${selectedIndex}`)
+    if (option && typeof option.scrollIntoView === 'function') option.scrollIntoView({ block: 'nearest' })
+  }, [listboxId, selectedIndex])
+
   if (!context) return null
 
   const menu = <div
+    ref={listboxRef}
     id={listboxId}
     role="listbox"
     aria-label="Sugestões de agentes"

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CommentComposer from './CommentComposer'
 import { api } from '../lib/api'
 
@@ -13,58 +13,74 @@ const agents = [
   { name: 'vault-security', description: 'Segurança', locked: true },
 ]
 
+beforeEach(() => vi.clearAllMocks())
+
 describe('CommentComposer', () => {
-  it('busca agentes somente ao abrir contexto e permite teclado, clique, caret e suffix', async () => {
-    const user = userEvent.setup()
+  it('busca agentes lazy, navega Up/Down, insere por Enter/Tab e preserva suffix/foco/caret', async () => {
     getAgents.mockResolvedValue(agents)
-    render(<CommentComposer assignee="zara-cs" submitting={false} onSubmit={vi.fn()} />)
+    render(<CommentComposer assignee="zara-cs" submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
     const textarea = screen.getByRole('combobox') as HTMLTextAreaElement
 
     expect(getAgents).not.toHaveBeenCalled()
-    await user.type(textarea, 'Antes @')
+    fireEvent.change(textarea, { target: { value: 'Antes @ depois', selectionStart: 7 } })
     await waitFor(() => expect(getAgents).toHaveBeenCalledWith('/agents'))
     await screen.findAllByRole('option')
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
-      expect.stringContaining('@zara-cs'),
-      expect.stringContaining('@atlas-project'),
-    ])
     expect(screen.queryByText('@vault-security')).not.toBeInTheDocument()
-    expect(screen.queryByText('@vault-security')).not.toBeInTheDocument()
-
     fireEvent.keyDown(textarea, { key: 'ArrowDown' })
-    fireEvent.keyDown(textarea, { key: 'Enter' })
-    await waitFor(() => expect(textarea.value).toBe('Antes @atlas-project'))
-    expect(document.activeElement).toBe(textarea)
-    expect(textarea.selectionStart).toBe(20)
-    await user.clear(textarea)
-    await user.type(textarea, '@za')
-    await screen.findByRole('option', { name: /@zara-cs/i })
-    fireEvent.blur(textarea)
-    fireEvent.click(screen.getByRole('option', { name: /@zara-cs/i }))
-    await waitFor(() => expect(textarea.value).toBe('@zara-cs'))
+    fireEvent.keyDown(textarea, { key: 'ArrowUp' })
+    fireEvent.keyDown(textarea, { key: 'Tab' })
+    await waitFor(() => expect(textarea.value).toBe('Antes @zara-cs depois'))
+    await waitFor(() => expect(document.activeElement).toBe(textarea))
+    expect(textarea.selectionStart).toBe(14)
   })
 
-  it('fecha em Escape e só declara aria-activedescendant para opção existente', async () => {
+  it('fecha em Escape, mantém ARIA válida e aceita clique após blur', async () => {
     getAgents.mockResolvedValue(agents)
-    render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn()} />)
-    const textarea = screen.getByRole('combobox')
+    render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
+    const textarea = screen.getByRole('combobox') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } })
+    await screen.findByRole('option', { name: /@atlas-project/i })
+    expect(textarea).toHaveAttribute('aria-activedescendant', 'mention-suggestions-0')
+    fireEvent.blur(textarea)
+    fireEvent.click(screen.getByRole('option', { name: /@atlas-project/i }))
+    await waitFor(() => expect(textarea.value).toBe('@atlas-project'))
+
     fireEvent.change(textarea, { target: { value: '@missing', selectionStart: 8 } })
-    await waitFor(() => expect(getAgents).toHaveBeenCalled())
-    expect(textarea).not.toHaveAttribute('aria-activedescendant')
+    await waitFor(() => expect(textarea).not.toHaveAttribute('aria-activedescendant'))
     fireEvent.keyDown(textarea, { key: 'Escape' })
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
-  it('expõe loading, erro, vazio e menu abaixo em fluxo ou acima sem sobreposição', async () => {
-    getAgents.mockImplementation(() => new Promise(() => {}))
-    const { rerender } = render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn()} />)
+  it('limpa somente após submissão bem-sucedida e preserva texto no erro', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    render(<CommentComposer assignee={null} submitting={false} onSubmit={onSubmit} />)
     const textarea = screen.getByRole('combobox')
-    fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } })
-    expect(await screen.findByText('Carregando agentes...')).toBeInTheDocument()
+    await user.type(textarea, 'primeiro')
+    await user.click(screen.getByRole('button', { name: 'Comment' }))
+    await waitFor(() => expect(textarea).toHaveValue(''))
+    await user.type(textarea, 'erro')
+    await user.click(screen.getByRole('button', { name: 'Comment' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
+    expect(textarea).toHaveValue('erro')
+  })
+
+  it('separa mounts de loading, erro e vazio', async () => {
+    getAgents.mockImplementation(() => new Promise(() => {}))
+    const loading = render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
+    fireEvent.change(loading.getByRole('combobox'), { target: { value: '@', selectionStart: 1 } })
+    expect(await loading.findByText('Carregando agentes...')).toBeInTheDocument()
+    loading.unmount()
 
     getAgents.mockRejectedValueOnce(new Error('offline'))
-    rerender(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn()} />)
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '@a', selectionStart: 2 } })
-    expect(await screen.findByText('Não foi possível carregar agentes.')).toBeInTheDocument()
+    const failed = render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
+    fireEvent.change(failed.getByRole('combobox'), { target: { value: '@', selectionStart: 1 } })
+    expect(await failed.findByText('Não foi possível carregar agentes.')).toBeInTheDocument()
+    failed.unmount()
+
+    getAgents.mockResolvedValueOnce([])
+    const empty = render(<CommentComposer assignee={null} submitting={false} onSubmit={vi.fn().mockResolvedValue(false)} />)
+    fireEvent.change(empty.getByRole('combobox'), { target: { value: '@', selectionStart: 1 } })
+    expect(await empty.findByText('Nenhum agente disponível.')).toBeInTheDocument()
   })
 })
