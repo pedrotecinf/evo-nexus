@@ -3,6 +3,7 @@ import {
   filterMentionAgents,
   findMentionContext,
   insertMention,
+  summarizeAgentDescription,
   type MentionAgent,
 } from './mentionAutocomplete'
 
@@ -42,5 +43,21 @@ describe('insertMention', () => {
   it('adiciona espaço depois da menção quando o próximo caractere não é whitespace', () => {
     expect(insertMention('@at, tudo bem', { start: 0, end: 3, query: 'at' }, 'atlas-project'))
       .toEqual({ value: '@atlas-project, tudo bem', caret: 14 })
+  })
+})
+
+describe('summarizeAgentDescription', () => {
+  it('remove prompt internals and returns a compact human-readable summary', () => {
+    const description = 'Use this agent when the user needs operational and strategic support — managing agenda, emails, tasks, meetings, prioritization, decision-making, research, documentation, or any form of organized execution.\\n\\nExamples:\\n<commentary>Internal routing instructions</commentary>'
+
+    const summary = summarizeAgentDescription(description)
+
+    expect(summary).toBe('Operational and strategic support — managing agenda, emails, tasks, meetings, prioritization, decision-making…')
+    expect(summary).not.toMatch(/Examples|commentary|\\n/)
+  })
+
+  it('normalizes tags, escaped whitespace and empty descriptions', () => {
+    expect(summarizeAgentDescription('  <b>Research</b>\\n\\tand   documentation.  ')).toBe('Research and documentation.')
+    expect(summarizeAgentDescription('')).toBe('')
   })
 })

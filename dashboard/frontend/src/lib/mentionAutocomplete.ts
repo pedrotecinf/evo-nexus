@@ -16,7 +16,8 @@ export interface MentionMenuGeometry {
 }
 
 const VIEWPORT_GUTTER = 12
-const PREFERRED_MENU_HEIGHT = 224
+const PREFERRED_MENU_HEIGHT = 288
+const DESCRIPTION_MAX_LENGTH = 120
 
 export function mentionMenuGeometry(rect: DOMRect, viewportHeight = window.innerHeight): MentionMenuGeometry {
   const above = Math.max(0, rect.top - VIEWPORT_GUTTER)
@@ -27,6 +28,35 @@ export function mentionMenuGeometry(rect: DOMRect, viewportHeight = window.inner
 }
 
 export const DEFAULT_MENTION_MENU_HEIGHT = PREFERRED_MENU_HEIGHT
+
+export function summarizeAgentDescription(description: string): string {
+  const firstSection = description
+    .replace(/\r\n/g, '\n')
+    .split(/(?:\\n\s*){2,}|\n\s*\n|\bExamples?:/i, 1)[0]
+    .replace(/\\[nrt]/g, ' ')
+    .replace(/[\n\r\t]/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\\"/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const withoutBoilerplate = firstSection
+    .replace(/^Use this agent when the user needs\s+/i, '')
+    .replace(/^Use this agent when\s+/i, '')
+    .trim()
+
+  if (!withoutBoilerplate) return ''
+
+  const summary = withoutBoilerplate[0].toUpperCase() + withoutBoilerplate.slice(1)
+  if (summary.length <= DESCRIPTION_MAX_LENGTH) return summary
+
+  const candidate = summary.slice(0, DESCRIPTION_MAX_LENGTH - 1)
+  const wordBoundary = candidate.lastIndexOf(' ')
+  const truncated = wordBoundary > DESCRIPTION_MAX_LENGTH / 2
+    ? candidate.slice(0, wordBoundary)
+    : candidate
+  return `${truncated.replace(/[\s,.;:—-]+$/, '')}…`
+}
 
 export function findMentionContext(value: string, caret: number): MentionContext | null {
   const before = value.slice(0, caret)
