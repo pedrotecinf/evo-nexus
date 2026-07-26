@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import MentionAutocomplete, { mentionMenuDirection } from './MentionAutocomplete'
+import MentionAutocomplete, { mentionMenuGeometry } from './MentionAutocomplete'
 
 const context = { start: 0, end: 2, query: 'a' }
 const agents = [
@@ -31,7 +31,8 @@ describe('MentionAutocomplete', () => {
 
   it('calcula direção acima ou abaixo conforme espaço disponível', () => {
     Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true })
-    expect(mentionMenuDirection({ top: 260, bottom: 480 } as DOMRect)).toBe('above')
-    expect(mentionMenuDirection({ top: 20, bottom: 100 } as DOMRect)).toBe('below')
+    expect(mentionMenuGeometry({ top: 260, bottom: 480 } as DOMRect)).toEqual({ direction: 'above', maxHeight: 224 })
+    expect(mentionMenuGeometry({ top: 20, bottom: 100 } as DOMRect)).toEqual({ direction: 'below', maxHeight: 224 })
+    expect(mentionMenuGeometry({ top: 10, bottom: 490 } as DOMRect)).toEqual({ direction: 'below', maxHeight: 0 })
   })
 })

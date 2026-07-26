@@ -1,24 +1,17 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Ticket, ArrowLeft, Lock, Unlock, MessageSquare, Activity,
-  RefreshCw, Send, Trash2, RotateCcw, Pencil, Archive, FolderPlus, Check, X,
+  RefreshCw, Trash2, RotateCcw, Pencil, Archive, FolderPlus, Check, X,
   PanelLeft,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import AgentChat from '../components/AgentChat'
 import ThreadsSidebar from '../components/ThreadsSidebar'
 import { TS_HTTP } from '../lib/terminal-url'
-import MentionAutocomplete from '../components/MentionAutocomplete'
-import {
-  filterMentionAgents,
-  findMentionContext,
-  insertMention,
-  type MentionAgent,
-  type MentionContext,
-} from '../lib/mentionAutocomplete'
+import CommentComposer from '../components/CommentComposer'
 
 type TicketStatus = 'open' | 'in_progress' | 'blocked' | 'review' | 'resolved' | 'closed' | 'archived'
 type TicketPriority = 'urgent' | 'high' | 'medium' | 'low'
@@ -126,12 +119,6 @@ export default function TicketDetail() {
   const [ticket, setTicket] = useState<TicketItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [commentBody, setCommentBody] = useState('')
-  const [mentionContext, setMentionContext] = useState<MentionContext | null>(null)
-  const [mentionAgents, setMentionAgents] = useState<MentionAgent[] | null>(null)
-  const [mentionAgentsError, setMentionAgentsError] = useState(false)
-  const [mentionIndex, setMentionIndex] = useState(0)
-  const commentRef = useRef<HTMLTextAreaElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [editStatus, setEditStatus] = useState(false)
   const [editPriority, setEditPriority] = useState(false)
@@ -201,13 +188,6 @@ export default function TicketDetail() {
 
   useEffect(() => { fetchTicket() }, [id])
 
-  useEffect(() => {
-    if (!mentionContext || mentionAgents !== null || mentionAgentsError) return
-    api.get('/agents')
-      .then((agents: MentionAgent[]) => setMentionAgents(agents))
-      .catch(() => setMentionAgentsError(true))
-  }, [mentionAgents, mentionAgentsError, mentionContext])
-
   const buildTimeline = (): TimelineItem[] => {
     if (!ticket) return []
     const items: TimelineItem[] = [
@@ -217,62 +197,11 @@ export default function TicketDetail() {
     return items.sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
 
-  const handleCommentChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = event.target.value
-    setCommentBody(value)
-    setMentionContext(findMentionContext(value, event.target.selectionStart ?? value.length))
-    setMentionIndex(0)
-  }
-
-  const closeMentionsIfOutOfContext = (event: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    const textarea = event.currentTarget
-    requestAnimationFrame(() => {
-      if (document.activeElement !== textarea) setMentionContext(null)
-    })
-  }
-
-  const selectMention = (agent: MentionAgent) => {
-    if (!mentionContext) return
-    const { value, caret } = insertMention(commentBody, mentionContext, agent.name)
-    setCommentBody(value)
-    setMentionContext(null)
-    requestAnimationFrame(() => {
-      commentRef.current?.focus()
-      commentRef.current?.setSelectionRange(caret, caret)
-    })
-  }
-
-  const handleCommentKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!mentionContext) return
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      setMentionContext(null)
-      return
-    }
-
-    const options = mentionAgents
-      ? filterMentionAgents(mentionAgents, mentionContext.query, ticket?.assignee_agent ?? null)
-      : []
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      event.preventDefault()
-      if (options.length > 0) {
-        setMentionIndex(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
-      }
-      return
-    }
-    if ((event.key === 'Enter' || event.key === 'Tab') && options.length > 0) {
-      event.preventDefault()
-      selectMention(options[mentionIndex])
-    }
-  }
-
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!commentBody.trim() || !id) return
+  const handleAddComment = async (body: string) => {
+    if (!body.trim() || !id) return
     setSubmitting(true)
     try {
-      await api.post(`/tickets/${id}/comments`, { body: commentBody.trim() })
-      setCommentBody('')
+      await api.post(`/tickets/${id}/comments`, { body: body.trim() })
       fetchTicket()
     } catch (err: any) {
       toast.error('Falha ao adicionar comentário', err?.message)
@@ -832,48 +761,11 @@ export default function TicketDetail() {
           <h2 className="text-sm font-semibold text-[#e6edf3] mb-3 flex items-center gap-2">
             <MessageSquare size={14} className="text-[#00FFA7]" /> Add Comment
           </h2>
-          <form onSubmit={handleAddComment}>
-            <div className="relative mb-3">
-              <textarea
-                ref={commentRef}
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={!!mentionContext}
-                aria-controls="mention-suggestions"
-                aria-activedescendant={mentionContext && mentionAgents ? `mention-suggestions-${mentionIndex}` : undefined}
-                className="w-full bg-[#0C111D] border border-[#21262d] rounded-lg px-3 py-2 text-sm text-[#e6edf3] placeholder-[#667085] focus:outline-none focus:border-[#00FFA7]/50 resize-none transition-colors"
-                placeholder="Add a comment... Use @agent-slug to mention an agent"
-                rows={3}
-                value={commentBody}
-                onChange={handleCommentChange}
-                onKeyDown={handleCommentKeyDown}
-                onBlur={closeMentionsIfOutOfContext}
-                onClick={event => setMentionContext(findMentionContext(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length))}
-              />
-              <MentionAutocomplete
-                agents={mentionAgents}
-                error={mentionAgentsError}
-                context={mentionContext}
-                assignee={ticket.assignee_agent}
-                selectedIndex={mentionIndex}
-                onSelect={selectMention}
-                onSelectedIndexChange={setMentionIndex}
-                anchorRef={commentRef}
-                listboxId="mention-suggestions"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] text-[#667085]">Tip: @mention an agent to wake their heartbeat</p>
-              <button
-                type="submit"
-                disabled={submitting || !commentBody.trim()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#00FFA7] text-black rounded-lg hover:bg-[#00FFA7]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Send size={12} />
-                {submitting ? 'Sending...' : 'Comment'}
-              </button>
-            </div>
-          </form>
+          <CommentComposer
+            assignee={ticket.assignee_agent}
+            submitting={submitting}
+            onSubmit={handleAddComment}
+          />
         </div>
       )}
 
